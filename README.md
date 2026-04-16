@@ -1,35 +1,27 @@
-# A-Chassis 🚗
-Welcome to the official GitHub page for A-Chassis. Here, you will find the beta updates and links to the latest versions.
+# B-Chassis 🚗
 
-<img alt="A-Chassis 1.7" src="https://github.com/user-attachments/assets/89b080cb-1bab-4f9b-8368-bbd0acefac81" width="400px" align="right">
+B-Chassis is a fork of **[A-Chassis](https://github.com/lisphm/A-Chassis)** focused on simplifying tuning for less advanced users. All credits for the original code goes to the A-Chassis team.
 
-[![Roblox Stable Car](https://badgen.net/badge/Roblox%20Stable%20(Car)/1.7.2/purple?icon=https://upload.wikimedia.org/wikipedia/commons/6/6c/Roblox_Logo.svg)](https://create.roblox.com/store/asset/13999609938)
-[![Roblox Stable Bike](https://badgen.net/badge/Roblox%20Stable%20(Bike)/1.7.2M/purple?icon=https://upload.wikimedia.org/wikipedia/commons/6/6c/Roblox_Logo.svg)](https://create.roblox.com/store/asset/113746229283884)
-[![GitHub Stable](https://badgen.net/badge/GitHub%20Stable%20(Both)/1.7.2(M)/purple?icon=github)](https://github.com/lisphm/A-Chassis/releases/tag/v1.7.2-stable)
- 
-A-Chassis is a free, open-source chassis kit on Roblox. It is set to provide a beginner-friendly, yet scalable starting point for those who want to experiment with automobiles.
+<img alt="B-Chassis" src="https://github.com/user-attachments/assets/89b080cb-1bab-4f9b-8368-bbd0acefac81" width="400px" align="right">
+
+### Why B-Chassis?
+A-Chassis is over 10 years old now. Because it tries to support everyone, it’s full of legacy code and way too many tuning parameters that confuse new people. It’s hard for the main project to delete anything because someone always complains, so B-Chassis is an option for those who want a simpler experience at the cost of some of those niche features.
+
+The goal is to strip the bloated and fragile code so you aren't looking over hundreds of unnecessary settings just to get a car moving the way you want it to.
 &nbsp;
 
-- 🔌Easy-to-use plugin system
-- 💪Extensive user support
-- 🌍Used by hundreds of experiences
+- ✂️ **Less Bloat:** We cut out legacy code and fragile workarounds.
+- 🛠️ **Easier Tuning:** Fewer parameters to deal with, making setup much faster.
+- 🔌 **Standardized:** Keeps the core plugin support so it still feels familiar.
 &nbsp;
 
-If you would like to contribute to the chassis, or if you need help with the chassis, you can check out [our Discord server](https://discord.gg/P2WXGe3U7E).
+For help with the original project or to see the base code, check out the [A-Chassis Discord](https://discord.gg/P2WXGe3U7E).
 
 # Installation 📦
-Installing A-Chassis from this page is a simple process.
-1. Download the `.rbxm` file from the [Releases](https://github.com/lisphm/A-Chassis/releases) page. You can find previous versions here as well
-2. Copy the `.rbxm` file into a place in Roblox Studio
+No releases or models yet since this is a work in progress.
 
-You can also install it with the Roblox model.
-1. Go to the [Roblox version](https://create.roblox.com/store/asset/13999609938) and click `Get Model`
-2. In a Roblox Studio place, open the <img src="https://github.com/lisphm/A-Chassis/assets/116984726/10eaab8a-4970-4dc8-af49-bec5cada7e78" width="14px">
-Toolbox
-3. Go into the <img src="https://github.com/lisphm/A-Chassis/assets/116984726/e57ba175-4357-4a07-893c-a5397a39b062" width="14px">Inventory tab
-4. Find and click the A-Chassis model to insert it into the place
+1. Download the files from this repo.
+2. Drop them into Roblox Studio manually.
 
-# Known Issues 🪧
-*Solved issues will be marked with **SOLVED** for one update cycle*
-1. Entire car shifts when steering on "New" steering type
-2. Bike animation breaks layered clothing
+# Contributions 🤝
+Feel free to open a PR if you find more legacy bloat that can be cut. The goal is to keep this as lean as possible.
