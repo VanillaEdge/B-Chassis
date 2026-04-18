@@ -47,35 +47,27 @@ local Tune = {}
 	Tune.CustomSuspensionDensity	= 1	-- Density of suspension joints, only applies to custom suspension. (0 makes them massless)
 
 --[[Suspension]]
-	Tune.SuspensionEnabled	= true	-- Enables suspension, true or false
+	Tune.SuspensionEnabled	= true		-- Enables suspension, true or false
 	
-	--Front Strut
-	Tune.FSusStiffness	= 10		-- Spring Force in kgf/mm. (To convert from Roblox stiffness, divide Roblox stiffness by 447.18324)
-	Tune.FSusDamping	= 3.9		-- Spring Damping in thousands of kg/s. (To convert from Roblox damping, divide Roblox damping by 45.6)
-	Tune.FSwayBar		= 3.2		-- Sway Bar Force in kgf/mm (more = less roll)
-
-	Tune.FSusLength		= 1.35		-- Base spring height (in studs)
-	Tune.FPreCompress	= 0.2		-- Adds to base spring height (in studs)
-	Tune.FExtensionLim	= 0.5		-- Max Extension Travel (in studs)
-	Tune.FCompressLim	= 0.3		-- Max Compression Travel (in studs)
-
-	--Rear Strut
-	Tune.RSusStiffness	= 11		-- Spring Force in kgf/mm. (To convert from Roblox stiffness, divide Roblox stiffness by 447.18324)
-	Tune.RSusDamping	= 4.4 		-- Spring Damping in thousands of kg/s. (To convert from Roblox damping, divide Roblox damping by 45.6)
-	Tune.RSwayBar		= 1.1		-- Sway Bar Force in kgf/mm (more = less roll)
+	-- Front Spring
+	Tune.FSusStiffness	= 1800			-- Sets the strength of the spring (RMU/s²)
+	Tune.FSusDamping	= 175			-- Sets how fast the spring's oscillation dies down (RMU/s)
 	
-	Tune.RSusLength		= 1.35		-- Base spring height (in studs)
-	Tune.RPreCompress	= 0.2		-- Adds to base spring height (in studs)
-	Tune.RExtensionLim	= 0.5		-- Max Extension Travel (in studs)
-	Tune.RCompressLim	= 0.3		-- Max Compression Travel (in studs)
-
-	--Aesthetics	
-	Tune.SusVisible		= true			-- Suspension Visible
-	Tune.SpringsVisible	= true			-- Springs Visible
-	Tune.SusRadius		= 0.2			-- Spring Coil Radius
-	Tune.SusThickness	= 0.1			-- Spring Coil Thickness
-	Tune.SusColor		= "Bright red"	-- Spring Color [BrickColor]
-	Tune.SusCoilCount	= 6				-- Spring Coil Count
+	Tune.FSusFreeLength = 1.8			-- Sets the natural resting length of the spring in studs
+	Tune.FSusMaxLength = 2.25			-- Sets the maximum length of the front spring in studs
+	Tune.FSusMinLength = 0.35			-- Sets the minimum length of the front spring in studs
+	
+	-- Rear Spring
+	Tune.RSusStiffness	= 1800			-- Sets the strength of the spring (RMU/s²)
+	Tune.RSusDamping	= 175			-- Sets how fast the spring's oscillation dies down (RMU/s)
+	
+	Tune.RSusFreeLength = 1.8			-- Sets the natural resting length of the spring in studs
+	Tune.RSusMaxLength = 2.25			-- Sets the maximum length of the front spring in studs
+	Tune.RSusMinLength = 0.35			-- Sets the minimum length of the front spring in studs
+	
+	-- Aesthetics
+	Tune.SusConstraintsVisible = true	-- Sets the visibility of Constraints in SuspensionGeometry (springs, rods, etc)
+	Tune.SusBasePartsVisible = true		-- Sets the visibility of BaseParts in SuspensionGeometry (meshes, parts)
 	
 --[[Steering]]
 	-- Front wheel steering
