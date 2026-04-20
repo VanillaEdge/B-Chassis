@@ -181,17 +181,14 @@ for _, v in Drive do
 	base.Name="Base"
 	base.CFrame=arm.CFrame*CFrame.new(0, Tune.AxleSize, 0)
 	base.Parent=v
-
-	local SteerOuter = (Tune.LockToLock*180)/Tune.SteerRatio
-	local SteerInner = math.min(SteerOuter-(SteerOuter*(1-Tune.Ackerman)), SteerOuter*1.2)
+	
+	local SteerOuter = Tune.SteerOuter
+	local SteerInner = Tune.SteerInner
 	if not string.find(v.Name, "F") then
 		SteerOuter = Tune.RSteerOuter
 		SteerInner = Tune.RSteerInner
-	elseif Tune.SteeringType == "Manual" then
-		SteerOuter = Tune.SteerOuter
-		SteerInner = Tune.SteerInner
 	end
-
+	
 	--Create Steering Anchor
 	local axle = arm:Clone()
 	axle.Name = "Axle"
