@@ -71,14 +71,6 @@ local Tune = {}
 	
 --[[Steering]]
 	-- Front wheel steering
-	Tune.SteeringType		= "Auto"		-- This can be "Auto" or "Manual".
-	
-	-- "Auto" Steering type somewhat realistically calculates steering angle for you
-	Tune.SteerRatio			= 18/1		-- Steering ratio of your steering rack, google it for your car
-	Tune.LockToLock			= 2.6		-- Number of turns of the steering wheel lock to lock, google it for your car
-	Tune.Ackerman			= 1.1		-- If you don't know what it is don't touch it, ranges from .7 to 1.2
-	
-	-- "Manual" steering type allows you to manually set the angle of the wheels
 	Tune.SteerInner			= 39		-- Inner wheel steering (in degrees)
 	Tune.SteerOuter			= 36		-- Outer wheel steering (in degrees)
 
