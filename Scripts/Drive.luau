@@ -687,13 +687,6 @@ end
 local function Steering(dt: number)
 	local deltaTime = dt * 60
 
-	local SteerOuter = _Tune.SteerOuter
-	local SteerInner = _Tune.SteerInner
-	if _Tune.SteeringType == "Auto" or _Tune.SteeringType == nil then
-		SteerOuter = (_Tune.LockToLock * 180) / _Tune.SteerRatio
-		SteerInner = math.min(SteerOuter - (SteerOuter * (1 - _Tune.Ackerman)), SteerOuter * 1.2)
-	end
-
 	local controller = LastInputWasGamepad or (_Tune.MSteerUsesContlr and _MSteer or false)
 	local SteerSpeed = controller and (_Tune.ContlrSteerSpeed>0 and _Tune.ContlrSteerSpeed or _Tune.Steerspeed) or _Tune.SteerSpeed * (1-math.min(_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)/_Tune.SteerSpeedDecay,1-(_Tune.MinSteerSpeed/100)))
 	local ReturnSpeed = controller and (_Tune.ContlrReturnSpeed>0 and _Tune.ContlrReturnSpeed or _Tune.ReturnSpeed) or _Tune.ReturnSpeed * (1-math.min(_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)/_Tune.SteerSpeedDecay,1-(_Tune.MinSteerSpeed/100)))
@@ -742,23 +735,26 @@ local function Steering(dt: number)
 
 	-- Apply Steering
 	for wheel, data in Wheels do
-		if data.CanSteer == 0 then continue end
-
+		if data.CanSteer == 0 then 
+			continue 
+		end
+		
 		local angle = 0
 		local rsteerVariableAngle = 1
+		
 		if data.CanSteer == 2 then
 			if data.Name == "FL" then
-				angle = (_GSteerC<0 and SteerInner or SteerOuter)*sDecay
+				angle = (_GSteerC < 0 and _Tune.SteerInner or _Tune.SteerOuter) * sDecay
 			elseif data.Name == "FR" then
-				angle = (_GSteerC<0 and SteerOuter or SteerInner)*sDecay
+				angle = (_GSteerC < 0 and _Tune.SteerOuter or _Tune.SteerInner) * sDecay
 			elseif data.Name == "F" then
-				angle = SteerInner*sDecay
+				angle = _Tune.SteerInner * sDecay
 			elseif data.Name == "RL" then
-				angle = (_GSteerC<0 and _Tune.RSteerInner or _Tune.RSteerOuter)*rsDecay
+				angle = (_GSteerC < 0 and _Tune.RSteerInner or _Tune.RSteerOuter) * rsDecay
 			elseif data.Name == "RR" then
-				angle = (_GSteerC<0 and _Tune.RSteerOuter or _Tune.RSteerInner)*rsDecay
+				angle = (_GSteerC < 0 and _Tune.RSteerOuter or _Tune.RSteerInner) * rsDecay
 			elseif data.Name == "R" then
-				angle = _Tune.RSteerInner*rsDecay
+				angle = _Tune.RSteerInner * rsDecay
 			end
 			if not data.isFront then	
 				if _Tune.FWSteer == "Static" then
