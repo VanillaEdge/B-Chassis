@@ -181,14 +181,7 @@ for _, v in Drive do
 	base.Name="Base"
 	base.CFrame=arm.CFrame*CFrame.new(0, Tune.AxleSize, 0)
 	base.Parent=v
-	
-	local SteerOuter = Tune.SteerOuter
-	local SteerInner = Tune.SteerInner
-	if not string.find(v.Name, "F") then
-		SteerOuter = Tune.RSteerOuter
-		SteerInner = Tune.RSteerInner
-	end
-	
+
 	--Create Steering Anchor
 	local axle = arm:Clone()
 	axle.Name = "Axle"
@@ -280,38 +273,24 @@ for _, v in Drive do
 		v:FindFirstChild("Steer"):Destroy()
 	end
 
-	if (v.Name=='FR' or v.Name=='FL' or v.Name=='F') or (Tune.FWSteer=='Static' or Tune.FWSteer=='Speed' or Tune.FWSteer=='Both') then
-		local steer
-		if Tune.PowerSteeringType == "New" then
-			local steerAttach0 = Instance.new("Attachment")
-			steerAttach0.Name = "SteerAttach0"
-			steerAttach0.Parent = arm
-
-			local steerAttach1 = Instance.new("Attachment")
-			steerAttach1.Name = "SteerAttach1"
-			steerAttach1.Parent = base
-
-			steer = Instance.new("AlignOrientation")
-			steer.Name = "Steer"
-			steer.Mode = Enum.OrientationAlignmentMode.TwoAttachment
-			steer.ReactionTorqueEnabled = true
-			steer.RigidityEnabled = true
-			steer.Attachment0 = steerAttach0
-			steer.Attachment1 = steerAttach1
-		else
-			steer = Instance.new("BodyGyro")
-			if string.find(v.Name, "F") then
-				steer.P=Tune.SteerP
-				steer.D=Tune.SteerD
-				steer.MaxTorque=Vector3.new(0, Tune.SteerMaxTorque, 0)
-			else
-				steer.P=Tune.RSteerP
-				steer.D=Tune.RSteerD
-				steer.MaxTorque=Vector3.new(0, Tune.RSteerMaxTorque, 0)
-			end
-		end
-		steer.Name="Steer"
-		steer.CFrame=v.CFrame
+	if (v.Name == "FR" or v.Name == "FL" or v.Name == "F") or (Tune.FWSteer == "Static" or Tune.FWSteer == "Speed" or Tune.FWSteer == "Both") then
+		local steerAttach0 = Instance.new("Attachment")
+		steerAttach0.Name = "SteerAttach0"
+		steerAttach0.Parent = arm
+		
+		local steerAttach1 = Instance.new("Attachment")
+		steerAttach1.Name = "SteerAttach1"
+		steerAttach1.Parent = base
+		
+		local steer = Instance.new("AlignOrientation")
+		steer.Name = "Steer"
+		steer.Mode = Enum.OrientationAlignmentMode.TwoAttachment
+		steer.ReactionTorqueEnabled = true
+		steer.RigidityEnabled = true
+		steer.Attachment0 = steerAttach0
+		steer.Attachment1 = steerAttach1
+		steer.Name = "Steer"
+		steer.CFrame = v.CFrame
 		steer.Parent = v.Arm
 	end
 
@@ -331,7 +310,7 @@ for _, v in Drive do
 	local rotationHinge = Instance.new("HingeConstraint")
 	rotationHinge.Name = "Rotate"
 	rotationHinge.LimitsEnabled = true
-	rotationHinge.UpperAngle = math.max(SteerOuter, SteerInner)
+	rotationHinge.UpperAngle = (string.find(v.Name, "F") and Tune.MaxSteerAngle or Tune.RMaxSteerAngle) + 5 -- +5 to prevent physics shaking
 	rotationHinge.LowerAngle = -rotationHinge.UpperAngle
 	rotationHinge.Attachment0 = rotationAttachment0
 	rotationHinge.Attachment1 = rotationAttachment1
@@ -656,11 +635,7 @@ seat.ChildRemoved:Connect(function(child: Instance)
 
 			-- Readjust steering
 			if wheel.Arm:FindFirstChild("Steer") then
-				if Tune.PowerSteeringType == "New" then
-					wheel.Arm.Steer.Attachment0.Orientation = Vector3.new(0, -wheel.Base.Rotate.CurrentAngle, 0)
-				else
-					wheel.Arm.Steer.CFrame = wheel.Base.CFrame * CFrame.Angles(0, math.rad(wheel.Base.Rotate.CurrentAngle), 0)
-				end
+				wheel.Arm.Steer.Attachment0.Orientation = Vector3.new(0, -wheel.Base.Rotate.CurrentAngle, 0)
 			end
 		end
 	end
