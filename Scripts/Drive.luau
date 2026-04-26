@@ -248,7 +248,7 @@ for _, v in car.Wheels:GetChildren() :: { BasePart } do
 	local arm = v:FindFirstChild("Arm")
 
 	local steer = arm and arm:FindFirstChild("Steer") or nil
-	local steerAttach0 = _Tune.PowerSteeringType == "New" and steer and steer.Attachment0 or nil
+	local steerAttach0 = steer and steer.Attachment0 or nil
 
 	local av = v:FindFirstChild("#AV")
 	local bv = v:FindFirstChild("#BV")
@@ -683,95 +683,91 @@ local function Inputs(dt: number)
 	end
 end
 
+local function SampleCurve(curve: { { number } }, x: number): number
+	for i = 2, #curve do
+		local a = curve[i - 1]
+		local b = curve[i]
+		
+		if x <= b[1] then
+			local t = (x - a[1]) / (b[1] - a[1])
+			return a[2] + (b[2] - a[2]) * math.clamp(t, 0, 1)
+		end
+	end
+	
+	return curve[#curve][2]
+end
+
 -- Steering
 local function Steering(dt: number)
-	local deltaTime = dt * 60
-
-	local controller = LastInputWasGamepad or (_Tune.MSteerUsesContlr and _MSteer or false)
-	local SteerSpeed = controller and (_Tune.ContlrSteerSpeed>0 and _Tune.ContlrSteerSpeed or _Tune.Steerspeed) or _Tune.SteerSpeed * (1-math.min(_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)/_Tune.SteerSpeedDecay,1-(_Tune.MinSteerSpeed/100)))
-	local ReturnSpeed = controller and (_Tune.ContlrReturnSpeed>0 and _Tune.ContlrReturnSpeed or _Tune.ReturnSpeed) or _Tune.ReturnSpeed * (1-math.min(_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)/_Tune.SteerSpeedDecay,1-(_Tune.MinSteerSpeed/100)))
-
+	local speed = _Velocity.Magnitude * (Units.Length_mm / 1000) * 3.6
+	
+	-- Mouse Steering
 	if _MSteer then
-		local msWidth = math.max(1,mouse.ViewSizeX*_Tune.Peripherals.MSteerWidth/200)
-		local mdZone = _Tune.Peripherals.MSteerDZone/100
-		local mST = ((mouse.X-mouse.ViewSizeX/2)/msWidth)
-		if math.abs(mST)<=mdZone then
-			_GSteerT = 0
-		else
-			_GSteerT = (math.max(math.min((math.abs(mST)-mdZone),(1-mdZone)),0)/(1-mdZone))^_Tune.MSteerExp * (mST / math.abs(mST))
+		local width = math.max(1, mouse.ViewSizeX * _Tune.Peripherals.MSteerWidth / 200)
+		_GSteerT = (mouse.X - mouse.ViewSizeX / 2) / width
+	end
+	
+	-- Steering Input
+	local input = math.clamp(_GSteerT, -1, 1)
+	if math.abs(input) > _Tune.SteerDeadzone then
+		input = math.sign(input) * SampleCurve(_Tune.SteerInputCurve, math.abs(input))
+	end
+	
+	-- Counter Steering
+	_CSAmt = 0
+	
+	if _CS and speed > _Tune.CSSpeedThresh then
+		local localVel = _Center:VectorToObjectSpace(_Velocity)
+		local sideRatio = localVel.X / math.max(_Velocity.Magnitude, 0.001)
+		local desiredCS = math.clamp(sideRatio, -1, 1) * (_Tune.CSAmt / 100)
+		
+		local steerLimit = math.max(_Tune.CSSteerThresh / 100, 0.001)
+		local inputFade = 1 - math.clamp(math.abs(input) / steerLimit, 0, 1)
+		
+		_CSAmt = desiredCS * inputFade
+	end
+	
+	_CSActive = math.abs(_CSAmt) > (_Tune.CSAmt / 100) * 0.01
+	
+	local target = math.clamp(input + _CSAmt, -1, 1)
+	local returning = math.abs(target) < math.abs(_GSteerC) or target * _GSteerC < 0
+	local steerTime = returning and _Tune.ReturnTime or _Tune.SteerTime
+	local step = dt / math.max(steerTime, 0.001)
+	
+	_GSteerC += math.clamp(target - _GSteerC, -step, step)
+	
+	-- Four Wheel Steering
+	local rearScale = 0
+	if _Tune.FWSteer ~= "None" then
+		local rearSpeed = speed / math.max(_Tune.RSteerSpeed, 0.001)
+		if _Tune.FWSteer == "Static" then
+			rearScale = -math.max(0, 1 - rearSpeed)
+
+		elseif _Tune.FWSteer == "Speed" then
+			rearScale = math.min(1, rearSpeed)
+
+		elseif _Tune.FWSteer == "Both" then
+			rearScale = math.clamp(rearSpeed - 1, -1, 1)
 		end
 	end
-
-	-- Interpolate Steering
-	if math.abs(_GSteerT) < _Tune.CSSteerThresh/100 and _CS and _Velocity.Magnitude * (Units.Length_mm/1000) * 3.6 > _Tune.CSSpeedThresh then
-		_CSAmt = (_Center:VectorToObjectSpace(_Velocity):Dot(Vector3.new(1, 0, 0))/math.max(_Velocity.Magnitude * (Units.Length_mm/1000) * 3.6, _Tune.CSSpeedThresh)) * (_Tune.CSAmt/100)
-	else
-		_CSAmt = 0
-	end
-	if math.abs(_CSAmt) > (_Tune.CSAmt/100) * 0.01 then
-		_CSActive = true
-	else
-		_CSActive = false
-	end
-	local SteerWithCounter = math.clamp(_GSteerT+_CSAmt, -1, 1)
-	local SteerSmoothing = math.clamp(math.abs(SteerWithCounter-_GSteerC)^(1/math.max(_Tune.SteerSmoothing, 0.001)), 0, 1)
-	if _GSteerC < SteerWithCounter then
-		if _GSteerC<0 then
-			_GSteerC = math.min(SteerWithCounter,_GSteerC+(ReturnSpeed*SteerSmoothing*deltaTime))
-		else
-			_GSteerC = math.min(SteerWithCounter,_GSteerC+(SteerSpeed*SteerSmoothing*deltaTime))
-		end
-	else
-		if _GSteerC>0 then
-			_GSteerC = math.max(SteerWithCounter,_GSteerC-(ReturnSpeed*SteerSmoothing*deltaTime))
-		else
-			_GSteerC = math.max(SteerWithCounter,_GSteerC-(SteerSpeed*SteerSmoothing*deltaTime))
-		end
-	end
-
-	-- Steer Decay Multiplier
-	local sDecay = (1-math.min(_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)/(_Tune.SteerDecay/(Units.Velocity_mdivs/3.6)),1-(_Tune.MinSteer/100)))
-	local rsDecay = (1-math.min(_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)/(_Tune.RSteerDecay/(Units.Velocity_mdivs/3.6)),1-(_Tune.MinSteer/100)))
-
-	-- Apply Steering
-	for wheel, data in Wheels do
-		if data.CanSteer == 0 then 
-			continue 
+	
+	-- Apply
+	local angleScale = SampleCurve(_Tune.MaxAngleCurve, speed)
+	for _, data in Wheels do
+		if data.CanSteer == 0 then
+			continue
 		end
 		
-		local angle = 0
-		local rsteerVariableAngle = 1
+		if data.CanSteer ~= 2 then
+			data.SteerAttach0.Orientation = Vector3.zero
+			continue
+		end
 		
-		if data.CanSteer == 2 then
-			if data.Name == "FL" then
-				angle = (_GSteerC < 0 and _Tune.SteerInner or _Tune.SteerOuter) * sDecay
-			elseif data.Name == "FR" then
-				angle = (_GSteerC < 0 and _Tune.SteerOuter or _Tune.SteerInner) * sDecay
-			elseif data.Name == "F" then
-				angle = _Tune.SteerInner * sDecay
-			elseif data.Name == "RL" then
-				angle = (_GSteerC < 0 and _Tune.RSteerInner or _Tune.RSteerOuter) * rsDecay
-			elseif data.Name == "RR" then
-				angle = (_GSteerC < 0 and _Tune.RSteerOuter or _Tune.RSteerInner) * rsDecay
-			elseif data.Name == "R" then
-				angle = _Tune.RSteerInner * rsDecay
-			end
-			if not data.isFront then	
-				if _Tune.FWSteer == "Static" then
-					rsteerVariableAngle = -math.max(0,1-(_Velocity.Magnitude/_Tune.RSteerSpeed))
-				elseif _Tune.FWSteer == "Speed" then
-					rsteerVariableAngle = math.min(1,(_Velocity.Magnitude/_Tune.RSteerSpeed))
-				elseif _Tune.FWSteer == "Both" then
-					rsteerVariableAngle = -math.max(-1,1-(_Velocity.Magnitude/_Tune.RSteerSpeed))
-				end
-			end
-		end
-
-		if _Tune.PowerSteeringType == "New" then
-			data.SteerAttach0.Orientation = Vector3.new(0, data.CanSteer==1 and 0 or _GSteerC*angle*rsteerVariableAngle, 0)
-		else
-			data.Steer.CFrame = data.Base.CFrame * (data.CanSteer == 1 and CFrame.new(0,0,0) or (CFrame.Angles(0, -math.rad(_GSteerC*angle*rsteerVariableAngle), 0)))
-		end
+		local maxAngle = data.isFront and _Tune.MaxSteerAngle or _Tune.RMaxSteerAngle
+		local steerScale = data.isFront and 1 or rearScale
+		local steerAngle = _GSteerC * maxAngle * angleScale * steerScale
+		
+		data.SteerAttach0.Orientation = Vector3.new(0, steerAngle, 0)
 	end
 end
 
