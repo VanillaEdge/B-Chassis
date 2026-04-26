@@ -70,48 +70,40 @@ local Tune = {}
 	Tune.SusBasePartsVisible = true		-- Sets the visibility of BaseParts in SuspensionGeometry (meshes, parts)
 	
 --[[Steering]]
-	-- Front wheel steering
-	Tune.SteerInner			= 39		-- Inner wheel steering (in degrees)
-	Tune.SteerOuter			= 36		-- Outer wheel steering (in degrees)
-
-	-- Steer speed tuning
-	Tune.SteerSpeed			= .05		-- Steering increment per tick (in degrees)
-	Tune.ReturnSpeed		= .1		-- Steering increment per tick (in degrees)
-	Tune.ContlrSteerSpeed	= 0			-- Controller version of steer speed (0 or less to be the same as SteerSpeed)
-	Tune.ContlrReturnSpeed	= 0			-- Controller version of return speed (0 or less to be the same as ReturnSpeed)
-	Tune.MSteerUsesContlr	= true		-- Set to true if you want mouse steering to use controller settings.
+	-- Front Steering
+	Tune.MaxSteerAngle = 32		-- Maximum front wheel steering angle in degrees at standstill, before speed scaling
 	
-	-- Steer Decay
-	Tune.SteerDecay			= 260		-- Speed of gradient cutoff (in km/h)
-	Tune.SteerSpeedDecay	= 260		-- Speed of gradient cutoff of steering speed (in km/h)
-	Tune.MinSteer			= 25		-- Minimum steering angle at max steer decay (in percent)
-	Tune.MinSteerSpeed		= 60		-- Minimum steering speed at max decay (in percent)
-	Tune.MSteerExp			= 1			-- Mouse steering exponential degree
+	-- Steering Response
+	Tune.SteerTime = 0.5		-- Time in seconds to reach the maximum steering angle from center
+	Tune.ReturnTime = 0.35		-- Time in seconds to reset from maximum steering angle to center
+	Tune.SteerDeadzone = 0.05	-- Minimum raw input threshold to filter out stick drift
+	
+	-- Steering Input
+	Tune.SteerInputCurve = {	-- [Raw Input : Steering Multiplier]
+		{0.0, 0.0},
+		{0.2, 0.05},
+		{0.5, 0.3},
+		{1.0, 1.0},
+	}
+	
+	-- Speed Scaling
+	Tune.MaxAngleCurve = {    -- [Speed KMH : Steering Angle Multiplier]
+		{0, 1.0},
+		{100, 0.8},
+		{200, 0.5},
+		{300, 0.3},
+	}
 	
 	-- Counter-steer
 	Tune.CSEnabled			= true		-- Enables or disables countersteering
 	Tune.CSAmt				= 100		-- Amount of countersteering at a full perpendicular slide (in percent)
-	Tune.CSSteerThresh		= 10		-- Threshold before countersteering activates (in percent)
-	Tune.CSSpeedThresh		= 10		-- Speed threshold before countersteering can activate (in km/h)
-
+	Tune.CSSteerThresh		= 10		-- Steering input where countersteer assist fades out (in percent)
+	Tune.CSSpeedThresh		= 10		-- Minimum vehicle speed before countersteering can activate, (in km/h)
+	
 	-- Four Wheel Steering
 	Tune.FWSteer			= "None"	-- Static, Speed, Both, or None
-	Tune.RSteerOuter		= 2.2		-- Outer rear wheel steering angle (in degrees)
-	Tune.RSteerInner		= 1.6		-- Inner rear wheel steering angle (in degrees)
-	Tune.RSteerSpeed		= 80		-- Speed at which 4WS fully activates (Speed), deactivates (Static), or transition begins (Both) (km/h)
-	Tune.RSteerDecay		= 150		-- Speed of gradient cutoff (in km/h)
-	
-	Tune.RSteerD				= 1000		-- Rear Steering Damping (old only)
-	Tune.RSteerP				= 50000		-- Rear Steering Aggressiveness (old only)
-	Tune.RSteerMaxTorque		= 20000		-- Rear Steering Force (old only)
-
-	-- Steering aggressiveness
-	Tune.SteerSmoothing		= 3			-- The lower, the smoother the steering will arrive at max angle.
-	Tune.PowerSteeringType	= "Old"		-- "New" uses AlignOrientation. This may cause problems.
-										-- "Old" uses BodyGyro.
-	Tune.SteerD				= 1000		-- Steering Damping (old only)
-	Tune.SteerP				= 50000		-- Steering Aggressiveness (old only)
-	Tune.SteerMaxTorque		= 20000		-- Steering Force (old only)
+	Tune.RMaxSteerAngle 	= 10		-- Rear wheel steering angle limit before speed scaling and 4WS mode scaling.
+	Tune.RSteerSpeed		= 80		-- Speed where 4WS fully activates (Speed), deactivates (Static), or transition begins (Both) (km/h)
 	
 --[[Engine (Detomiks)]]
 
