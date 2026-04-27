@@ -464,16 +464,17 @@ end
 do
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "FlipAttachment"
+	attachment.Axis = Vector3.new(0, 1, 0)
 	attachment.Parent = car.DriveSeat
 
 	local alignOrientation = Instance.new("AlignOrientation")
 	alignOrientation.Name = "Flip"
 	alignOrientation.Enabled = false
 	alignOrientation.RigidityEnabled = true
-	alignOrientation.AlignType = Enum.AlignType.AllAxes
+	alignOrientation.AlignType = Enum.AlignType.PrimaryAxisParallel
 	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
 	alignOrientation.Attachment0 = attachment
-	alignOrientation.CFrame = CFrame.new(0, attachment.WorldOrientation.Y, 0)
+	alignOrientation.PrimaryAxis = Vector3.new(0, 1, 0)
 	alignOrientation.Parent = car.DriveSeat
 end
 
