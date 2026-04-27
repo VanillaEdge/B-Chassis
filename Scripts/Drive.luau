@@ -226,7 +226,7 @@ local _FlipActive = false
 
 local weightBrick = car.Body["#Weight"] :: Part
 local driveSeat = car.DriveSeat :: VehicleSeat
-local flipAlignOrientation = driveSeat.FlipAlignOrientation :: AlignOrientation
+local flipAlignOrientation = driveSeat.Flip :: AlignOrientation
 
 -- Initialize Client
 local FWheelCount = 0
