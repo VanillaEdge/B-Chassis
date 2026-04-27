@@ -467,13 +467,13 @@ do
 	attachment.Parent = car.DriveSeat
 
 	local alignOrientation = Instance.new("AlignOrientation")
-	alignOrientation.Name = "FlipAlignOrientation"
+	alignOrientation.Name = "Flip"
 	alignOrientation.Enabled = false
 	alignOrientation.RigidityEnabled = true
 	alignOrientation.AlignType = Enum.AlignType.AllAxes
 	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
 	alignOrientation.Attachment0 = attachment
-	alignOrientation.CFrame = CFrame.new(0, 0, 0)
+	alignOrientation.CFrame = CFrame.new(0, attachment.WorldOrientation.Y, 0)
 	alignOrientation.Parent = car.DriveSeat
 end
 
