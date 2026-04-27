@@ -207,9 +207,6 @@ local _CS = _Tune.CSEnabled
 local _CSActive = false
 local _CSAmt = 0
 
-local _FlipWait = tick()
-local _FlipDB = false
-
 local _WheelSpeedsTable = {}
 local _WheelSpeeds = {}
 
@@ -224,8 +221,12 @@ local _Center = CFrame.new()
 
 local _InitialAutoShiftVers = _Tune.AutoShiftVers
 
+local _FlipWait = os.clock()
+local _FlipActive = false
+
 local weightBrick = car.Body["#Weight"] :: Part
 local driveSeat = car.DriveSeat :: VehicleSeat
+local flipAlignOrientation = driveSeat.FlipAlignOrientation :: AlignOrientation
 
 -- Initialize Client
 local FWheelCount = 0
@@ -327,19 +328,14 @@ driveSeat.ChildRemoved:Connect(function(child: Instance)
 		if _Tune.Mobile and LastInputWasMobile then
 			_Tune.AutoShiftVers = _InitialAutoShiftVers
 		end
-
+		
 		-- Remove Flip Force
-		if driveSeat:FindFirstChild("Flip") then
-			if _Tune.FlipType == "New" then
-				driveSeat.Flip.Enabled = false
-			else
-				driveSeat.Flip.MaxTorque = Vector3.new()
-			end
-		end
-
+		flipAlignOrientation.Enabled = false
+		_FlipActive = false
+		
 		-- Save PBrake state
 		car["A-Chassis Tune"]["A-Chassis Interface"].Values.PBrake.Value = _PBrake
-
+		
 		-- Remove Wheel Force
 		for _, data in Wheels do
 			if data.AV then
@@ -1382,30 +1378,32 @@ end
 
 -- Flip
 local function Flip()
-	-- Detect Orientation
-	if _FlipDB or (driveSeat.CFrame * CFrame.Angles(math.pi / 2, 0, 0)).LookVector.Y > 0.1 then
-		_FlipWait = tick()
-	else
-		if tick() - _FlipWait >= 3 then
-			_FlipDB = true
-			if _Tune.FlipType == "New" then
-				local gyro = driveSeat.Flip
-				gyro.Enabled = true
-				task.wait(1)
-				gyro.Enabled = false
-			else
-				local gyro = driveSeat.Flip
-				gyro.maxTorque = Vector3.new(10000, 0, 10000)
-				gyro.P = 3000
-				gyro.D = 500
-				task.wait(1)
-				gyro.maxTorque = Vector3.new(0, 0, 0)
-				gyro.P = 0
-				gyro.D = 0
-			end
-			_FlipDB = false
-		end
+	local isUpright = driveSeat.CFrame.UpVector.Y > 0.1
+	if isUpright then
+		_FlipWait = os.clock()
+		return
 	end
+	
+	if _FlipActive then
+		return
+	end
+	
+	if os.clock() - _FlipWait < 3 then
+		return
+	end
+	
+	_FlipActive = true
+	_FlipWait = os.clock()
+	
+	flipAlignOrientation.CFrame = CFrame.Angles(0, math.rad(flipAlignOrientation.Attachment0.WorldOrientation.Y), 0)
+	flipAlignOrientation.Enabled = true
+	
+	task.delay(0.5, function()
+		if flipAlignOrientation.Parent then
+			flipAlignOrientation.Enabled = false
+		end
+		_FlipActive = false
+	end)
 end
 
 -- Last Input Type
