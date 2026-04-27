@@ -15,8 +15,7 @@ local Tune = {}
 	Tune.AutoStart		= true		    -- Set to false if using manual ignition plugin
 	Tune.AutoFlip		= true		    -- Set to false if using manual flip plugin
 	Tune.Mobile			= true			-- Set to false if using a 3rd party mobile support method.
-	Tune.FlipType		= "New"			-- "New" uses AlignOrientation, "Old" uses BodyGyro. This really only needs to be changed for plugin compatibility.
-
+	
 --[[Wheel Alignment]]
 	--[Values are in degrees]
 	Tune.FCamber		= -0.5
@@ -62,8 +61,8 @@ local Tune = {}
 	Tune.RSusDamping	= 175			-- Sets how fast the spring's oscillation dies down (RMU/s)
 	
 	Tune.RSusFreeLength = 1.8			-- Sets the natural resting length of the spring in studs
-	Tune.RSusMaxLength = 2.25			-- Sets the maximum length of the front spring in studs
-	Tune.RSusMinLength = 0.35			-- Sets the minimum length of the front spring in studs
+	Tune.RSusMaxLength = 2.25			-- Sets the maximum length of the rear spring in studs
+	Tune.RSusMinLength = 0.35			-- Sets the minimum length of the rear spring in studs
 	
 	-- Aesthetics
 	Tune.SusConstraintsVisible = true	-- Sets the visibility of Constraints in SuspensionGeometry (springs, rods, etc)
