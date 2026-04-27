@@ -150,12 +150,13 @@ local _Clutch = 0
 local _ClutchKick = 0
 local _ClutchModulate = 0
 
-local _RPM = _Tune.AutoStart and _Tune.IgnitionRPM or 0
+local _RPM = _Tune.AutoStart and _Tune.IdleRPM or 0
 local _OutTorque = 0
 local _CGear = ParkingGearOffset == 1 and -2 or 0
 local _ShiftUp = false
 local _ShiftDn = false
 local _Shifting = false
+local _StallTimer = 0
 local _spLimit = 0
 
 local engine = car["A-Chassis Tune"].README:FindFirstChild("CustomEngine") and require(car["A-Chassis Tune"].README:FindFirstChild("CustomEngine")) or nil
@@ -183,6 +184,7 @@ local _FlywheelEnergy = 0
 
 local _TMode = _Tune.TransModes[1]
 local _RevLimiting = false
+local _RevCutTimer = 0
 
 local _SteerL = false
 local _SteerR = false
@@ -701,6 +703,9 @@ local function Steering(dt: number)
 	if _MSteer then
 		local width = math.max(1, mouse.ViewSizeX * _Tune.Peripherals.MSteerWidth / 200)
 		_GSteerT = (mouse.X - mouse.ViewSizeX / 2) / width
+		if math.abs(_GSteerT) < (_Tune.Peripherals.MSteerDZone / 100) then
+			_GSteerT = 0
+		end
 	end
 	
 	-- Steering Input
@@ -776,7 +781,6 @@ if not _Tune.Engine and _Tune.Electric then
 	_Tune.Superchargers = 0
 	_Tune.Clutch = false 
 	_Tune.IdleRPM = 0 
-	_Tune.IdleThrottle = 0
 	_Tune.ClutchType = "Clutch" 
 	_Tune.AutoShiftType = "DCT"
 end
@@ -786,13 +790,17 @@ local function Auto()
 	if not _IsOn then 
 		return 
 	end
-
+	
 	local fFD = _Tune.FinalDrive * _Tune.FDMult
 	local fFDr = fFD * 30 / math.pi
-
-	if _Tune.AutoShiftVers == "Old" and (_CGear == 0 or (ParkingGearEnabled and _CGear == -2)) then _CGear = 1 _ClPressing = false end
+	
+	if _Tune.AutoShiftVers == "Old" and (_CGear == 0 or (ParkingGearEnabled and _CGear == -2)) then 
+		_ClPressing = false 
+		_CGear = 1
+	end
+	
 	if _CGear >= 1 then
-		if (_CGear==1 and _InBrake > 0 and _Velocity.Magnitude < 5) and _Tune.AutoShiftVers == "Old" then
+		if (_CGear==1 and _InBrake > 0 and _InThrot <= 0 and _Velocity.Magnitude < 5) and _Tune.AutoShiftVers == "Old" then
 			_CGear = -1 _ClPressing = false
 		elseif _Velocity.Magnitude > 5 and _Tune.ClutchType ~= "CVT" then
 			if _Tune.AutoShiftMode == "RPM" then
@@ -811,7 +819,8 @@ local function Auto()
 		end
 	else
 		if (_InThrot > 0 and _Velocity.Magnitude < 5) and _Tune.AutoShiftVers == "Old" then
-			_CGear = 1 _ClPressing = false
+			_ClPressing = false
+			_CGear = 1
 		end
 	end
 end
@@ -877,8 +886,6 @@ end
 
 local goalRPM = 0
 local tqTCS = 1
-local stallOk = false
-local ticc = tick()
 
 -- Power calculation prerequesites
 local function f(m: number, n: number, p: number, q: number, M: number, b: number, x: number): number
@@ -915,100 +922,90 @@ local function Engine(dt: number)
 
 	-- Flywheel/clutch-dumping
 	_FlywheelEnergy = math.max((_RPM-_WheelRPM)*_Tune.DumpMult,0) * (1-_Clutch) * 1.356*Units.Torque_nm
-
-	-- Determine RPM
-	local revMin = 0
-	local goalMin = 0
-	local goalMax = _Tune.Redline
-
-	if _Shifting and _ShiftUp then 
-		_GThrot = _Tune.IdleThrottle/100
+	
+	-- Throttle
+	if _Shifting and _ShiftUp then
+		_GThrot = 0
 	elseif _Shifting and _ShiftDn then
-		_GThrot = _Tune.ShiftThrot/100
+		_GThrot = _Tune.ShiftThrot / 100
+	elseif _Tune.AutoShiftVers == "Old" and _CGear == -1 and _TMode == "Auto" then
+		_GThrot = _InBrake
 	else
-		if (_Tune.AutoShiftVers == "Old" and _CGear==-1 and _TMode=="Auto") then
-			_GThrot = _InBrake
-		else
-			_GThrot = math.max(_InThrot, _Tune.IdleThrottle/100)
-		end
+		_GThrot = _InThrot
 	end
-
+	
+	-- Brake
 	if (_Tune.AutoShiftVers == "Old" and _CGear==-1 and _TMode=="Auto") then
 		_GBrake = _InThrot
 	else
 		_GBrake = _InBrake
 	end
-
-	if not _IsOn then 
-		ticc = tick()
+	
+	if not _IsOn then
+		_StallTimer = 0
 		if _AutoClutch then
-			_Clutch = 1 
+			_Clutch = 1
 		end
 		_GThrot = 0
 	end
-
-	if ((_ClPressing and (_CGear == 0 or (ParkingGearEnabled and _CGear == -2))) or (_PlayerClutch and _CGear ~= 0)) and _Tune.NeutralLimit then
-		if ((_CGear == 0 or (ParkingGearEnabled and _CGear == -2)) and not _Tune.LimitClutch) or _Tune.LimitClutch then
-			goalMax = _Tune.NeutralRevRPM
-		end
+	
+	-- Rev limiter
+	_RevCutTimer = math.max(_RevCutTimer - dt, 0)
+	
+	if not _IsOn then
+		_RevCutTimer = 0
+	elseif _RPM >= _Tune.Redline and _RevCutTimer <= 0 then
+		_RevCutTimer = _Tune.RedlineThrottleCutTime or 0.08
 	end
-
-	-- Rev limiter/speed limiter
-	if _RPM >= _Tune.Redline then
-		_RevLimiting = true
-	elseif _RPM < goalMax-_Tune.RevBounce then
-		_RevLimiting = false
-	end
+	
+	_RevLimiting = _RevCutTimer > 0
+	
 	if _RevLimiting then
-		_GThrot = _Tune.IdleThrottle/100
+		_GThrot = 0
 	end
-
-	local limit = (_CGear<0 and _Tune.ReverseSpeed or _Tune.SpeedLimit)
+	
+	-- Speed limiter
+	local limit = (_CGear < 0 and _Tune.ReverseSpeed or _Tune.SpeedLimit)
 	if limit > 0 then
-		_GThrot = math.min(_GThrot, math.max(1 - math.clamp(((_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)) - (limit-_Tune.SLimitGradient))/_Tune.SLimitGradient, 0, 1), _Tune.IdleThrottle/100))
+		local speed = _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)
+		local cut = 1 - math.clamp((speed - (limit - _Tune.SLimitGradient)) / _Tune.SLimitGradient, 0, 1)
+		_GThrot = math.min(_GThrot, cut)
+		
 		if _Tune.SLimitBrake then
-			_GBrake = math.max(_GBrake, math.clamp( (_Velocity.Magnitude/(Units.Velocity_mdivs/3.6) - limit)/_Tune.SLimitGradient, 0, 1))
+			_GBrake = math.max(_GBrake, math.clamp((speed - limit) / _Tune.SLimitGradient, 0, 1))
 		end
 	end
-
-	-- Idle
-	if _RPM<_Tune.IdleRPM+(_Tune.IdlePadding or 0) and _IsOn then
-		_GThrot = math.max(_GThrot, math.clamp((_Tune.IdleRPM+(_Tune.IdlePadding or 0)-_RPM)/(_Tune.IdleDamping or 400), 0, 1))
+	
+	-- Idler circuit	
+	local rpmThrottle = _GThrot
+	if _IsOn and _Tune.Engine then
+		local idleTarget = _Tune.IdleRPM + (math.random() * 2 - 1) * (_Tune.IdleInstability or 0)
+		local idleThrottle = math.clamp((idleTarget - _RPM) / math.max(_Tune.IdleRPM * 0.5, 1), 0, 0.45)
+		rpmThrottle = math.max(rpmThrottle, idleThrottle)
 	end
-
-	if (_Tune.Engine or _Tune.Electric) and (not _Starting) then
-		goalRPM = math.clamp(_RPM - (_Tune.RevDecay*deltaTime) + (_Tune.RevAccel*_GThrot*deltaTime) - (math.clamp(math.max(_RPM-_Tune.IdleRPM,0)/math.max(_Tune.Redline-_Tune.IdleRPM,1),0,1)*_Tune.RevDecayRPM*deltaTime), goalMin, goalMax)
+	
+	if (_Tune.Engine or _Tune.Electric) and not _Starting then 
+		goalRPM = math.clamp(_RPM - (_Tune.RevDecay * deltaTime) + (_Tune.RevAccel * rpmThrottle * deltaTime) - (math.clamp(math.max(_RPM - _Tune.IdleRPM, 0) / math.max(_Tune.Redline - _Tune.IdleRPM, 1), 0, 1) * _Tune.RevDecayRPM * deltaTime), 0, _Tune.Redline)
 	end
-
-	-- Starting
-	if _Starting then
-		goalRPM = math.clamp(goalRPM + _Tune.IgnitionAccel * deltaTime, 0, math.max(_Tune.IgnitionRPM, _WheelRPM))
-		IsOnValue.Value = goalRPM > _Tune.IgnitionMinRPM
-	end
-
+	
 	-- Set RPM
-	local aRPM = math.max((goalRPM*(1-deltaTime) + _WheelRPM*deltaTime)*(1-_Clutch) + goalRPM*_Clutch, revMin)
-	local clutchP = math.min(math.abs(aRPM-_RPM) / (_Tune.Flywheel*deltaTime), .9)
+	local aRPM = math.max((goalRPM * (1 - deltaTime) + _WheelRPM * deltaTime) * (1 - _Clutch) + goalRPM * _Clutch, 0)
+	local clutchP = math.min(math.abs(aRPM - _RPM) / (_Tune.Flywheel * deltaTime), 0.9)
 	if _ClPressing then 
 		clutchP = 0 
 	end
-	_RPM = aRPM*(1-clutchP) + _RPM*clutchP
-
-	if _Tune.OverRev == false and _RPM > _Tune.Redline then 
-		_RPM = _Tune.Redline 
+	_RPM = aRPM * (1 - clutchP) + _RPM * clutchP
+	
+	if _RPM > _Tune.Redline then
+		_RPM = _Tune.Redline
 	end
-
-	if _RPM<=(_Tune.IdleRPM/4) and stallOk and (tick()-ticc>=0.2) and _Tune.Stall then 
-		IsOnValue.Value = false 
-	end
-
+	
 	-- Clutch
-	if _Shifting or (_AutoClutch and (_CGear == 0 or (ParkingGearEnabled and _CGear == -2))) then
+	if _Shifting or (_CGear == 0 or (ParkingGearEnabled and _CGear == -2)) then
 		_ClPressing = true
 		_Clutch = 1
-		stallOk = false
 	end
-
+	
 	if _Tune.Clutch then
 		if _AutoClutch then
 			if _Tune.ClutchType == "Clutch" or _Tune.ClutchType == "CVT" then
@@ -1018,10 +1015,10 @@ local function Engine(dt: number)
 				if _Tune.ClutchMode == "New" then ClRPMInfluence = 0 end
 				_ClutchModulate = math.min(((((math.max(_Velocity.Magnitude, 0.001) / (Units.Velocity_mdivs / 3.6) / _Tune.SpeedEngage) / math.max(math.abs(_CGear), 1)) + ClRPMInfluence) - _ClutchKick), 1)
 			elseif _Tune.ClutchType == "TorqueConverter" and _Tune.TQLock then
-				if (_GThrot<=_Tune.IdleThrottle/100 and _Velocity.Magnitude/(Units.Velocity_mdivs/3.6)<_Tune.SpeedEngage) or (_GThrot>_Tune.IdleThrottle/100 and (_RPM < _Tune.RPMEngage and _WheelRPM < _Tune.RPMEngage)) then
-					_ClutchModulate = math.min(_ClutchModulate*(_Tune.ClutchEngage/100), 1)
+				if (_GThrot <= 0.01 and _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6) < _Tune.SpeedEngage) or (_GThrot > 0.01 and (_RPM < _Tune.RPMEngage and _WheelRPM < _Tune.RPMEngage)) then
+					_ClutchModulate = math.min(_ClutchModulate * (_Tune.ClutchEngage / 100), 1)
 				else
-					_ClutchModulate = math.min(_ClutchModulate*(_Tune.ClutchEngage/100)+(1-(_Tune.ClutchEngage/100)), 1)
+					_ClutchModulate = math.min(_ClutchModulate * (_Tune.ClutchEngage / 100) + (1 - (_Tune.ClutchEngage / 100)), 1)
 				end
 			elseif _Tune.ClutchType == "TorqueConverter" and not _Tune.TQLock then
 				_ClutchModulate = math.min((_RPM/_Tune.Redline)*0.7, 1)
@@ -1034,17 +1031,29 @@ local function Engine(dt: number)
 				_Clutch = 0
 			end
 		end
-		stallOk = (_Clutch<=0.01) or stallOk
 	else
-		stallOk = false
-		if not _ClPressing and not _Shifting then _Clutch = 0 else _Clutch = 1 end
+		if not _ClPressing and not _Shifting then 
+			_Clutch = 0 
+		else 
+			_Clutch = 1 
+		end
 	end
-
-	-- Things that apply the clutch
-	if _AutoClutch and (_Starting or (_Tune.RemoveCreep and _RPM < _Tune.IdleRPM+(_Tune.IdlePadding or 0) and _IThrot < .1) or (_RevLimiting and _Tune.OverRev == false)) then
+	
+	if _AutoClutch and (_Starting or _RevLimiting) then
 		_Clutch = 1
 	end
-
+	
+	local canStall = _Tune.Stall and _Tune.Clutch and _Tune.Engine and _IsOn and not _Starting and _Clutch <= 0.01 and _RPM <= _Tune.IdleRPM * 0.25
+	if canStall then
+		_StallTimer += dt
+		if _StallTimer >= 0.2 then
+			IsOnValue.Value = false
+			_StallTimer = 0
+		end
+	else
+		_StallTimer = 0
+	end
+	
 	-- Torque calculations (Detomiks)
 	-- What you see here is mostly just ported over from Desmos.
 	if not engine or _Tune.CustomEngineCalculations == false then
@@ -1058,7 +1067,7 @@ local function Engine(dt: number)
 			local NRedlineTorque = f(_Tune.PeakTorqueRPM/1000, _Tune.PeakTorque, _Tune.Redline/1000, _Tune.RedlineTorque, _Tune.PeakTorque, 1/_Tune.RedlineTorqueCurve, x)
 			local VVL = _Tune.VVLTorque > 0 and _Tune.VVLTorque - f(_Tune.VVLRPM/1000, 0, (_Tune.VVLRPM + _Tune.VVLTime)/1000, _Tune.VVLTorque, _Tune.VVLTorque, _Tune.VVLCurve, x) or 0
 			local AirPressurePercent = math.exp((-9.80665 * 0.0289644 * (_Center.Y * Units.Length_mm / 1000)) / (8.3142 * (GlobalTemperature + 273.15))) -- look up the barometric formula 
-			NTorque = 1 * (_Tune.PeakTorque - NIdleTorque - NRedlineTorque + VVL) * AirPressurePercent
+			NTorque = (_Tune.PeakTorque - NIdleTorque - NRedlineTorque + VVL) * AirPressurePercent * (math.clamp(x / (_Tune.IdleRPM / 1000), 0, 1)) -- fix to torque produced when engine off
 			_NH, _NT = (NTorque*x)/5.252, NTorque
 
 			if _Tune.Turbochargers > 0 then
@@ -1092,7 +1101,11 @@ local function Engine(dt: number)
 			ETorque = 1 * (_Tune.E_Torque - f(_Tune.E_TransitionRPM/1000, _Tune.E_Torque, _Tune.E_Redline/1000, _Tune.E_RedlineTorque, _Tune.E_Torque, _Tune.E_Curve, x))
 			_EH, _ET = (ETorque*x)/5.252, ETorque
 		end
-		local TotalTorque = math.clamp(NTorque + ETorque + TTorque + STorque, _Tune.Stall and 0 or _Tune.IdleTorque, (_Tune.HPLimit > 0 and _Tune.HPLimit or math.huge)*(5.252/x))
+		
+		local minTorque = _Tune.Stall and 0 or _Tune.IdleTorque
+		local maxTorque = (_Tune.HPLimit > 0 and _Tune.HPLimit or math.huge) * (5.252 / math.max(x, 0.001))
+
+		local TotalTorque = math.clamp(NTorque + ETorque + TTorque + STorque, minTorque, maxTorque)
 		_HP, _TQ = (TotalTorque*x)/5.252, TotalTorque
 	else
 		engine.run({
@@ -1121,7 +1134,13 @@ local function Engine(dt: number)
 		_BH = engine._BH
 		_BT = engine._BT
 	end
-
+	
+	-- Starter
+	if _Starting then
+		IsOnValue.Value = true
+		_TQ += _Tune.StarterTorque or 120
+	end
+	
 	-- Exit engine
 	_OutTorque = _TQ * _CurrentRatio * fFD
 	local iComp = (_Center.LookVector.Y)*cGrav*math.sign(_CGear)
@@ -1142,10 +1161,10 @@ local function Engine(dt: number)
 		local throt = _GThrot
 		local brake = _GBrake
 
-		local clutch=1
-		if _ClPressing or (_AutoClutch and (_Starting or (_Tune.RemoveCreep and _RPM < _Tune.IdleRPM+(_Tune.IdlePadding or 0) and _IThrot < .1))) then 
-			clutch=0 
-		end -- for some reason, the car still creeps forward when starting the car if i don't do this
+		local clutch = 1
+		if _ClPressing or (_AutoClutch and _Starting) then
+			clutch = 0
+		end
 
 		-- Apply ESC
 		local tqESC = 0
@@ -1212,14 +1231,15 @@ local function Engine(dt: number)
 
 			-- Apply TCS
 			tqTCS = 1
-			if _TCS and throt>_Tune.IdleThrottle/100 then
-				tqTCS = 1-(math.min(math.max(0,math.abs(data.RotVelocityMagnitude*(data.Size.Y/2)/(Units.Velocity_mdivs/3.6) - data.WheelVelocityMagnitude/(Units.Velocity_mdivs/3.6))-_Tune.TCSThreshold)/_Tune.TCSGradient,1)*(1-(_Tune.TCSLimit/100)))
+			if _TCS and throt > 0.01 then
+				tqTCS = 1 - (math.min(math.max(0, math.abs(data.RotVelocityMagnitude * (data.Size.Y / 2) / (Units.Velocity_mdivs / 3.6) - data.WheelVelocityMagnitude / (Units.Velocity_mdivs / 3.6)) - _Tune.TCSThreshold) / _Tune.TCSGradient, 1) * (1 - (_Tune.TCSLimit / 100)))
 			end
 			_TCSActive = tqTCS < 1 or _TCSActive
-			_TCSTracker[data.Name] = 1-tqTCS
+			_TCSTracker[data.Name] = 1 - tqTCS
 
 			-- Update Forces
-			local tqOUT = (tq*1.356*Units.Torque_nm*throt*tqTCS*on*clutch) + (_FlywheelEnergy/#Drive)
+			local tqOUT = ((tq * 1.356 * Units.Torque_nm * tqTCS * clutch) + (_FlywheelEnergy / #Drive)) * throt * on
+			
 			-- convert lb-ft to nm to roblox stuff
 			-- if it reaches an absurdly high number, set it to 0 to try and prevent physics death
 
