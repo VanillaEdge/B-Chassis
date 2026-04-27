@@ -1395,7 +1395,6 @@ local function Flip()
 	_FlipActive = true
 	_FlipWait = os.clock()
 	
-	flipAlignOrientation.CFrame = CFrame.Angles(0, math.rad(flipAlignOrientation.Attachment0.WorldOrientation.Y), 0)
 	flipAlignOrientation.Enabled = true
 	
 	task.delay(0.5, function()
