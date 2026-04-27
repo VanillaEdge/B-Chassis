@@ -460,28 +460,22 @@ for i, descendent in car:GetDescendants() do
 	force.Parent = descendent
 end
 
-local flipG
-if Tune.FlipType == "New" then
-	local flipAttach = Instance.new("Attachment")
-	flipAttach.Axis = Vector3.new(0, 1, 0)
-	flipAttach.Parent = car.DriveSeat
+-- Flip
+do
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "FlipAttachment"
+	attachment.Axis = Vector3.new(0, 1, 0)
+	attachment.Parent = car.DriveSeat
 
-	flipG = Instance.new("AlignOrientation")
-	flipG.Name = "Flip"
-	flipG.Attachment0 = flipAttach
-	flipG.AlignType = Enum.AlignType.PrimaryAxisParallel
-	flipG.RigidityEnabled = true
-	flipG.Enabled = false
-	flipG.Mode = Enum.OrientationAlignmentMode.OneAttachment
-	flipG.PrimaryAxis = Vector3.new(0, 1, 0)
-	flipG.Parent = car.DriveSeat
-elseif Tune.FlipType == "Old" then
-	flipG = Instance.new("BodyGyro")
-	flipG.Name = "Flip"
-	flipG.D = 0
-	flipG.MaxTorque = Vector3.new(0, 0, 0)
-	flipG.P = 0
-	flipG.Parent = car.DriveSeat
+	local alignOrientation = Instance.new("AlignOrientation")
+	alignOrientation.Name = "Flip"
+	alignOrientation.Enabled = false
+	alignOrientation.RigidityEnabled = true
+	alignOrientation.AlignType = Enum.AlignType.PrimaryAxisParallel
+	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	alignOrientation.Attachment0 = attachment
+	alignOrientation.PrimaryAxis = Vector3.new(0, 1, 0)
+	alignOrientation.Parent = car.DriveSeat
 end
 
 --[[Finalize Chassis]]	
@@ -609,11 +603,7 @@ seat.ChildRemoved:Connect(function(child: Instance)
 
 		-- Remove Flip Force
 		if seat:FindFirstChild("Flip") then
-			if Tune.FlipType == "New" then
-				seat.Flip.Enabled = false
-			else
-				seat.Flip.MaxTorque = Vector3.new()
-			end
+			seat.Flip.Enabled = false
 		end
 
 		-- Handle wheel changes
