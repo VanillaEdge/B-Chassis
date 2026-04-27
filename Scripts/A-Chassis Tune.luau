@@ -115,21 +115,22 @@ local Tune = {}
 	
 	-- Naturally Aspirated Engine
 	Tune.Engine 		= true		
-
+		
 		Tune.PeakTorque				= 390		-- The maximum amount of torque the engine makes in lb-ft.
 		Tune.PeakTorqueRPM			= 2500		-- When the engine reaches PeakTorque in RPM.
 
 		Tune.IdleRPM				= 1000		-- The engine's desired idle RPM. IdleDamping may change this.
 		Tune.IdleTorque				= 315		-- How much torque the engine makes at idle.
-		Tune.IdleTorqueCurve		= 0.275		-- The shape of the torque curve between idle and PeakRPM.
+		Tune.IdleTorqueCurve		= 0.275		-- The shape of the torque curve between idle and ShiftRPM.
+		Tune.IdleInstability 		= 20 		-- RPM wander above/below IdleRPM. Set 0 for perfectly stable idle.
 
 		Tune.Redline				= 7500		-- The maximum RPM.
 		Tune.RedlineTorque			= 160		-- How much torque the engine makes at redline.
-		Tune.RedlineTorqueCurve		= 0.31		-- The shape of the torque curve between PeakRPM and redline.
+		Tune.RedlineTorqueCurve		= 0.31		-- The shape of the torque curve between ShiftRPM and redline.
+		Tune.RedlineThrottleCutTime	= 0.06		-- Seconds to cut throttle after hitting redline
 		
 		Tune.ShiftRPM				= 7000		-- This is when the engine shifts.
-		Tune.PeakRPM				= Tune.ShiftRPM		-- This is deprecated, only used for plugin compatibility.
-
+		
 		Tune.VVLTorque				= 0			-- Variable Valve Lift (VVL, aka VTEC)'s amount of torque. Set this to 0 to turn off.
 		Tune.VVLRPM					= 3000		-- When VVL activates in RPM.
 		Tune.VVLTime				= 1000		-- How long it takes for VVL to activate in RPM.
@@ -155,7 +156,7 @@ local Tune = {}
 		Tune.T_PeakRPM			= 2500		-- When the turbo reaches maximum boost.
 
 		Tune.T_IdleBoost		= 0			-- How much boost is made at idle.
-		Tune.T_Curve			= 0.91		-- The shape of the boost curve between idle and PeakRPM.
+		Tune.T_Curve			= 0.91		-- The shape of the boost curve between idle and ShiftRPM.
 		
 		Tune.T_Efficiency		= 10		-- How much torque is made with 1 PSI.
 		
@@ -170,30 +171,23 @@ local Tune = {}
 		Tune.S_PeakRPM			= 5500		-- When the supercharger reaches its maximum boost.
 		
 		Tune.S_IdleBoost		= 6.1		-- The amount of boost at idle.
-		Tune.S_IdleCurve		= 0.31		-- The shape of the boost curve between idle and PeakRPM.
+		Tune.S_IdleCurve		= 0.31		-- The shape of the boost curve between idle and ShiftRPM.
 
 		Tune.S_RedlineBoost		= 5.6		-- The amount of boost at redline.
-		Tune.S_RedlineCurve		= 0.187		-- The shape of the boost curve between PeakRPM and redline.
+		Tune.S_RedlineCurve		= 0.187		-- The shape of the boost curve between ShiftRPM and redline.
 
 		Tune.S_Efficiency		= 4.34		-- How much torque is made with 1 PSI.
 
 		Tune.S_Response			= 0.1		-- Throttle response of the supercharger. (Higher = more responsive, ranges from 0 to 1)
-
-
-	-- Ignition
-	Tune.IgnitionRPM	= 1200		-- This is how high the engine revs for the ignition.
-	Tune.IgnitionAccel	= 30		-- The acceleration of the RPM while starting the car.
-	Tune.IgnitionMinRPM	= 800		-- The minimum RPM required to start the car.
+		
+	-- Starter
+	Tune.StarterTorque 			= 120		-- Amount of torque produced by starter during ignition
 	
 	-- Throttle and brake input
 	Tune.ThrotAccel		= .05		-- Throttle acceleration, applied per tick (recommended values between 0.1 to 0.3)
 	Tune.ThrotDecel		= .2		-- Throttle deceleration, applied per tick (recommended values between 0.05 to 0.1)
 	Tune.BrakeAccel		= .1		-- Brake acceleration, applied per tick
 	Tune.BrakeDecel		= .2		-- Brake deceleration, applied per tick
-
-	-- Engine speed 
-	Tune.RevBounce		= 200		-- RPM kickback from redline
-	Tune.OverRev		= false		-- Set to true to allow the RPM to go above redline
 	
 	Tune.RevAccel		= 180		-- RPM acceleration when clutch is on (this should be higher than RevDecay and RevDecayRPM)
 	Tune.RevDecay		= 30		-- RPM decay when clutch is on
@@ -201,11 +195,6 @@ local Tune = {}
 
 	Tune.Flywheel		= 800		-- Flywheel weight (higher = faster response, lower = more stable RPM)
 	Tune.DumpMult		= 1.0		-- Flywheel energy multiplier when dumping the clutch (keep at 1.0 for the best result).
-	
-	Tune.IdleThrottle	= 5			-- Percent throttle with no input. (in percent)
-	Tune.IdleDamping	= 4800		-- Damping of idle in RPM. This will change that actual idle RPM at higher values.
-	Tune.IdlePadding	= 800		-- Added on top of IdleRPM to account for IdleDamping
-	Tune.RemoveCreep	= true		-- Tries to remove the natural creep of the chassis by applying clutch if there is no input throttle and if the RPM is below idle.
 	
 	Tune.InclineComp	= 1.0	    -- Torque compensation multiplier for inclines (applies gradient from 0-90 degrees)
 	
@@ -262,7 +251,7 @@ local Tune = {}
 																		]] 
 --[[Transmission]]
 	--Transmission Settings
-	Tune.Stall			= true		-- Stalling, enables the car to stall. An ignition plugin would be necessary. Disables if Tune.Clutch is false.
+	Tune.Stall			= false		-- Stalling, enables the car to stall. An ignition plugin would be necessary. Disables if Tune.Clutch is false.
 	Tune.ClutchRel		= false		-- If true, the driver must let off the gas before shifting to a higher gear. Recommended false for beginners.
 	Tune.ClutchEngage	= 10		-- How fast engagement is (0 = instant, 99 = super slow)	
 	Tune.SpeedEngage 	= 40		-- Speed the clutch fully engages at (Based on km/h)
@@ -279,11 +268,6 @@ local Tune = {}
 	Tune.CVTMaxRatio	= 6			-- The gear ratio that the CVT cannot go over.
 	Tune.CVTMinRatio	= 1			-- The gear ratio that the CVT cannot go under.
 
-	--Neutral Rev Limiter (Avxnturador)
-	Tune.NeutralLimit	= false		-- Enables a different redline RPM for when the car is in neutral
-	Tune.NeutralRevRPM	= 5000		-- The rev limiter when the car is in neutral
-	Tune.LimitClutch	= false		-- Will also limit RPMs while the clutch is pressed down
-
 	--Automatic Settings
 	Tune.AutoShiftMode	= "Speed"												--[[
 	[Modes]
@@ -293,12 +277,13 @@ local Tune = {}
 	[Types]
 		"Rev"		: Clutch engages fully once RPM reached			(AC6C V1)
 		"DCT"		: Clutch engages after a set time has passed	(AC6.81T)	]]
-	Tune.AutoShiftVers	= "New"												--[[
+	Tune.AutoShiftVers	= "Old"												--[[
 	[Versions]
 		"New"		: Shift from Reverse, Neutral, and Drive		(AC6.81T)
 		"Old"		: Auto shifts into R or D when stopped.			(AC6.52S2)	]]
-	Tune.AutoUpThresh	= -200		-- Automatic upshift point 	(relative to peak RPM, positive = Over-rev)
-	Tune.AutoDownThresh = 1400		-- Automatic downshift point (relative to peak RPM, positive = Under-rev)
+	
+	Tune.AutoUpThresh	= -200		-- Automatic upshift point 	(relative to ShiftRPM, positive = Over-rev)
+	Tune.AutoDownThresh = 1400		-- Automatic downshift point (relative to ShiftRPM, positive = Under-rev)
 
 	--Automatic: Revmatching
 	Tune.ShiftThrot		= 100		-- Throttle level when shifting down to revmatch, 0 - 100%
@@ -350,7 +335,7 @@ local Tune = {}
 	--Peripheral Deadzones
 	Tune.Peripherals = {
 		MSteerWidth				= 67		,	-- Mouse steering control width	(0 - 100% of screen width)
-		MSteerDZone				= 10		,	-- Mouse steering deadzone (0 - 100%)
+		MSteerDZone				= 0			,	-- Mouse steering deadzone (0 - 100%)
 
 		ControlLDZone			= 5			,	-- Controller steering L-deadzone (0 - 100%)
 		ControlRDZone			= 5			,	-- Controller steering R-deadzone (0 - 100%)
