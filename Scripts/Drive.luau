@@ -666,21 +666,6 @@ if _Tune.Mobile then
 	DealWithMobileInput()
 end
 
--- Throttle and Brake Input Smoothing
-local function Inputs(dt: number)
-	local deltaTime = dt * 60
-	if _InThrot <= _IThrot then
-		_InThrot = math.min(_IThrot,_InThrot+(_Tune.ThrotAccel*deltaTime))
-	else
-		_InThrot = math.max(_IThrot,_InThrot-(_Tune.ThrotDecel*deltaTime))
-	end
-	if _InBrake <= _IBrake then
-		_InBrake = math.min(_IBrake,_InBrake+(_Tune.BrakeAccel*deltaTime))
-	else
-		_InBrake = math.max(_IBrake,_InBrake-(_Tune.BrakeDecel*deltaTime))
-	end
-end
-
 local function SampleCurve(curve: { { number } }, x: number): number
 	for i = 2, #curve do
 		local a = curve[i - 1]
@@ -895,13 +880,25 @@ end
 -- Apply Power
 local function Engine(dt: number)
 	local deltaTime = dt * 60
-
+	
 	local fFD = _Tune.FinalDrive * _Tune.FDMult
 	local fFDr = fFD * 30 / math.pi
 	local cGrav = (_Tune.GravComp > 0 and _Tune.GravComp or workspace.Gravity) * _Tune.InclineComp / 35
-
+	
 	local _WheelRPM = _DriveWheelSpeed * _CurrentRatio * fFDr
-
+	
+	-- Pedal smoothing
+	if LastInputWasGamepad then
+		_InThrot = _IThrot
+		_InBrake = _IBrake
+	else
+		local throtStep = dt / math.max(_Tune.ThrotTime, 0.001)
+		local brakeStep = dt / math.max(_Tune.BrakeTime, 0.001)
+		
+		_InThrot += math.clamp(_IThrot - _InThrot, -throtStep, throtStep)
+		_InBrake += math.clamp(_IBrake - _InBrake, -brakeStep, brakeStep)
+	end
+	
 	-- CVT
 	if _Tune.ClutchType == "CVT" then
 		local denom = _DriveWheelSpeed * fFDr
@@ -1527,10 +1524,7 @@ local function RuntimeLoop(dt: number)
 
 	-- Wheel Output
 	WheelOutput(dt)
-
-	-- Inputs
-	Inputs(dt)
-
+	
 	-- Steering
 	Steering(dt)
 
