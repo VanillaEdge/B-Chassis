@@ -183,11 +183,9 @@ local Tune = {}
 	-- Starter
 	Tune.StarterTorque 			= 120		-- Amount of torque produced by starter during ignition
 	
-	-- Throttle and brake input
-	Tune.ThrotAccel		= .05		-- Throttle acceleration, applied per tick (recommended values between 0.1 to 0.3)
-	Tune.ThrotDecel		= .2		-- Throttle deceleration, applied per tick (recommended values between 0.05 to 0.1)
-	Tune.BrakeAccel		= .1		-- Brake acceleration, applied per tick
-	Tune.BrakeDecel		= .2		-- Brake deceleration, applied per tick
+	-- Pedal Smoothing
+	Tune.ThrotTime		= 0.25		-- Time in seconds to reach target throttle, ignored for controller
+	Tune.BrakeTime		= 0.10		-- Time in seconds to reach target brake, ignored for controller
 	
 	Tune.RevAccel		= 180		-- RPM acceleration when clutch is on (this should be higher than RevDecay and RevDecayRPM)
 	Tune.RevDecay		= 30		-- RPM decay when clutch is on
