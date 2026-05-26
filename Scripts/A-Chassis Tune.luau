@@ -271,25 +271,18 @@ local Tune = {}
 	[Modes]
 		"Speed"		: Shifts based on wheel speed
 		"RPM"		: Shifts based on RPM										]]	
-	Tune.AutoShiftType	= "DCT"												--[[
-	[Types]
-		"Rev"		: Clutch engages fully once RPM reached			(AC6C V1)
-		"DCT"		: Clutch engages after a set time has passed	(AC6.81T)	]]
 	Tune.AutoShiftVers	= "Old"												--[[
 	[Versions]
 		"New"		: Shift from Reverse, Neutral, and Drive		(AC6.81T)
 		"Old"		: Auto shifts into R or D when stopped.			(AC6.52S2)	]]
 	
-	Tune.AutoUpThresh	= -200		-- Automatic upshift point 	(relative to ShiftRPM, positive = Over-rev)
-	Tune.AutoDownThresh = 1400		-- Automatic downshift point (relative to ShiftRPM, positive = Under-rev)
-
-	--Automatic: Revmatching
-	Tune.ShiftThrot		= 100		-- Throttle level when shifting down to revmatch, 0 - 100%
-
-	--Automatic: DCT
-	Tune.ShiftUpTime	= 0.2		-- Time required to shift into next gear, from a lower gear to a higher one.
-	Tune.ShiftDnTime	= 0.1		-- Time required to shift into next gear, from a higher gear to a lower one.
-
+	Tune.AutoUpThresh		= -200	-- Automatic upshift threshold relative to ShiftRPM.
+	Tune.AutoDownThresh		= 1400	-- Automatic downshift threshold below ShiftRPM.
+	
+	Tune.ShiftUpTime		= 0.2	-- Time in seconds to complete an automatic upshift.
+	Tune.ShiftDnTime		= 0.1	-- Time in seconds to complete an automatic downshift.
+	Tune.ShiftDnThrottle	= 80	-- Throttle override during automatic downshift, 0 - 100%.
+	
 	--Gear Ratios
 	--You can tune the gears in the engine graphs by switching G_TunerType inside Desmos
 	Tune.FinalDrive		= 3.621
@@ -304,8 +297,6 @@ local Tune = {}
 		--[[ 5 ]]		1.101		,
 		--[[ 6 ]]		0.893		,
 	}
-
-	Tune.FDMult			= 1			-- Ratio multiplier (keep this at 1 if car is not struggling with torque)
 
 	-- Speed Limiter
 	Tune.SpeedLimit 	= 0	 		-- Maximum speed limit in km/h (0 or less for no limiter)
@@ -333,7 +324,7 @@ local Tune = {}
 	--Peripheral Deadzones
 	Tune.Peripherals = {
 		MSteerWidth				= 67		,	-- Mouse steering control width	(0 - 100% of screen width)
-		MSteerDZone				= 0			,	-- Mouse steering deadzone (0 - 100%)
+		MSteerDZone				= 10		,	-- Mouse steering deadzone (0 - 100%)
 
 		ControlLDZone			= 5			,	-- Controller steering L-deadzone (0 - 100%)
 		ControlRDZone			= 5			,	-- Controller steering R-deadzone (0 - 100%)
