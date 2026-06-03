@@ -1,11 +1,12 @@
---[[	
-		             _____ _                   _     
-	     /\         / ____| |                 (_)    
-	    /  \ ______| |    | |__   __ _ ___ ___ _ ___ 
-	   / /\ \______| |    | '_ \ / _` / __/ __| / __|
-	  / ____ \     | |____| | | | (_| \__ \__ \ \__ \
-	 /_/    \_\     \_____|_| |_|\__,_|___/___/_|___/
-	 Version 1.7
+--[[
+	  ____         _____ _                   _     
+	 |  _ \       / ____| |                 (_)    
+	 | |_) |_____| |    | |__   __ _ ___ ___ _ ___ 
+	 |  _ <______| |    | '_ \ / _` / __/ __| / __|
+	 | |_) |     | |____| | | | (_| \__ \__ \ \__ \
+	 |____/       \_____|_| |_|\__,_|___/___/_|___/
+	 
+	Version 1
 --]]
 
 --[[START]]
@@ -587,7 +588,7 @@ seat.ChildAdded:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
 		local player = Players:GetPlayerFromCharacter(child.Part1.Parent)
 		if not player then return end
-
+		
 		car.DriveSeat:SetNetworkOwner(player)
 
 		local clone = interface:Clone()
@@ -643,5 +644,7 @@ end)
 --Allow entering the car now that everything is initialized
 task.wait(1)
 script.Parent.Parent.DriveSeat.Disabled = false
+
+script:SetAttribute("Loaded", true)
 
 --[END]]
