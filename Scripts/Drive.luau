@@ -685,6 +685,26 @@ local function SampleCurve(curve: { { number } }, x: number): number
 	return curve[#curve][2]
 end
 
+local function MoveToward(current: number, target: number, step: number): number
+	if current < target then
+		return math.min(current + step, target)
+	elseif current > target then
+		return math.max(current - step, target)
+	end
+	
+	return target
+end
+
+local function StepForTime(dt: number, time: number, range: number ?): number
+	range = range or 1
+	
+	if time <= 0 then
+		return range
+	end
+	
+	return range * dt / time
+end
+
 -- Steering
 local function Steering(dt: number)
 	local speed = _Velocity.Magnitude * (Units.Length_mm / 1000) * 3.6
@@ -736,9 +756,7 @@ local function Steering(dt: number)
 	
 	local returning = math.abs(target) < math.abs(_GSteerC) or target * _GSteerC < 0
 	local steerTime = returning and _Tune.ReturnTime or _Tune.SteerTime
-	local step = dt / math.max(steerTime, 0.001)
-	
-	_GSteerC += math.clamp(target - _GSteerC, -step, step)
+	_GSteerC = MoveToward(_GSteerC, target, StepForTime(dt, steerTime))
 	
 	-- Four Wheel Steering
 	local rearScale = 0
@@ -897,11 +915,8 @@ local function Engine(dt: number)
 		_InThrot = _IThrot
 		_InBrake = _IBrake
 	else
-		local throtStep = dt / math.max(_Tune.ThrotTime, 0.001)
-		local brakeStep = dt / math.max(_Tune.BrakeTime, 0.001)
-		
-		_InThrot += math.clamp(_IThrot - _InThrot, -throtStep, throtStep)
-		_InBrake += math.clamp(_IBrake - _InBrake, -brakeStep, brakeStep)
+		_InThrot = MoveToward(_InThrot, _IThrot, StepForTime(dt, _Tune.ThrotTime))
+		_InBrake = MoveToward(_InBrake, _IBrake, StepForTime(dt, _Tune.BrakeTime))
 	end
 	
 	-- CVT
@@ -921,7 +936,7 @@ local function Engine(dt: number)
 	if _CurrentRatio*fFDr == 0 then
 		_spLimit = 0
 	end -- Prevents [nan] from dividing by 0
-
+	
 	-- Flywheel/clutch-dumping
 	_FlywheelEnergy = math.max((_RPM-_WheelRPM)*_Tune.DumpMult,0) * (1-_Clutch) * 1.356*Units.Torque_nm
 	
@@ -1010,35 +1025,30 @@ local function Engine(dt: number)
 	
 	if _Tune.Clutch then
 		if _AutoClutch then
+			local vehicleSpeed = _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)
 			if _Tune.ClutchType == "Clutch" or _Tune.ClutchType == "CVT" then
-				if _ClPressing then _ClutchKick = 1 end
-				_ClutchKick = _ClutchKick*(_Tune.ClutchEngage/100)
-				local ClRPMInfluence = math.max(_RPM*_Tune.ClutchRPMMult/_Tune.Redline,0)
-				if _Tune.ClutchMode == "New" then ClRPMInfluence = 0 end
-				_ClutchModulate = math.min(((((math.max(_Velocity.Magnitude, 0.001) / (Units.Velocity_mdivs / 3.6) / _Tune.SpeedEngage) / math.max(math.abs(_CGear), 1)) + ClRPMInfluence) - _ClutchKick), 1)
+				_ClutchKick = _ClPressing and 1 or MoveToward(_ClutchKick, 0, StepForTime(dt, _Tune.ClutchTime))				
+				
+				local speedInfluence = vehicleSpeed / math.max(_Tune.SpeedEngage, 0.001) -- / math.max(math.abs(_CGear), 1)
+				_ClutchModulate = math.clamp(speedInfluence - _ClutchKick, 0, 1)
+				
 			elseif _Tune.ClutchType == "TorqueConverter" and _Tune.TQLock then
-				if (_GThrot <= 0.01 and _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6) < _Tune.SpeedEngage) or (_GThrot > 0.01 and (_RPM < _Tune.RPMEngage and _WheelRPM < _Tune.RPMEngage)) then
-					_ClutchModulate = math.min(_ClutchModulate * (_Tune.ClutchEngage / 100), 1)
-				else
-					_ClutchModulate = math.min(_ClutchModulate * (_Tune.ClutchEngage / 100) + (1 - (_Tune.ClutchEngage / 100)), 1)
-				end
+				local offThrottleUnlock = _GThrot <= 0.01 and vehicleSpeed < _Tune.SpeedEngage
+				local onThrottleUnlock = _GThrot > 0.01 and _RPM < _Tune.RPMEngage and _WheelRPM < _Tune.RPMEngage
+				
+				local targetModulate = (offThrottleUnlock or onThrottleUnlock) and 0 or 1
+				_ClutchModulate = MoveToward(_ClutchModulate, targetModulate, StepForTime(dt, _Tune.ClutchTime))
+				
 			elseif _Tune.ClutchType == "TorqueConverter" and not _Tune.TQLock then
-				_ClutchModulate = math.min((_RPM/_Tune.Redline)*0.7, 1)
+				_ClutchModulate = math.min((_RPM / _Tune.Redline) * 0.7, 1)
 			end
-			if not _ClPressing then _Clutch = math.min(1-_ClutchModulate,1) else _Clutch = 1 end
+			
+			_Clutch = _ClPressing and 1 or 1 - _ClutchModulate
 		else
-			if _ClPressing then
-				_Clutch = 1
-			else
-				_Clutch = 0
-			end
+			_Clutch = _ClPressing and 1 or 0
 		end
 	else
-		if not _ClPressing and not _Shifting then 
-			_Clutch = 0 
-		else 
-			_Clutch = 1 
-		end
+		_Clutch = (not _ClPressing and not _Shifting) and 0 or 1
 	end
 	
 	if _AutoClutch and (_Starting or _RevLimiting) then
@@ -1071,34 +1081,38 @@ local function Engine(dt: number)
 			local AirPressurePercent = math.exp((-9.80665 * 0.0289644 * (_Center.Y * Units.Length_mm / 1000)) / (8.3142 * (GlobalTemperature + 273.15))) -- look up the barometric formula 
 			NTorque = (_Tune.PeakTorque - NIdleTorque - NRedlineTorque + VVL) * AirPressurePercent * (math.clamp(x / (_Tune.IdleRPM / 1000), 0, 1)) -- fix to torque produced when engine off
 			_NH, _NT = (NTorque*x)/5.252, NTorque
-
+			
 			if _Tune.Turbochargers > 0 then
-				local _TBoostGoal = _Tune.Turbochargers * ((_GThrot^3) * (100/_Tune.T_Size) * ((NTorque*x)/5.252) - f(_Tune.IdleRPM/1000, _Tune.T_IdleBoost, _Tune.T_PeakRPM/1000, _Tune.T_Boost, (_GThrot^3) * (100/_Tune.T_Size) * ((NTorque*x)/5.252), 1/_Tune.T_Curve, x))
-				if _TBoostGoal > _TBoost then
-					_TBoost = _TBoost + math.min(_Tune.T_SpoolIncrease*(_TBoostGoal-_TBoost), _Tune.T_SpoolIncrease * (10/_Tune.T_Size) * _Tune.Turbochargers) * deltaTime -- i should probably base this off of the maximum horsepower instead of the RPM, but it's the same thing anyway
-				elseif _TBoost > _TBoostGoal then
-					_TBoost = _TBoost + _Tune.T_SpoolDecrease*(_TBoostGoal-_TBoost) * deltaTime
-				end
-				_TBoost = math.clamp(_TBoost, 0, _Tune.Turbochargers * _Tune.T_Boost)
+				local turboMaxBoost = _Tune.Turbochargers * _Tune.T_Boost
+				local turboBoostGoal = _Tune.Turbochargers * ((_GThrot ^ 3) * (100 / _Tune.T_Size) * ((NTorque * x) / 5.252) - f(_Tune.IdleRPM / 1000, _Tune.T_IdleBoost, _Tune.T_PeakRPM / 1000, _Tune.T_Boost, (_GThrot ^ 3) * (100 / _Tune.T_Size) * ((NTorque * x) / 5.252), 1 / _Tune.T_Curve, x))
+				turboBoostGoal = math.clamp(turboBoostGoal, 0, turboMaxBoost)
+				
+				local spoolTime = turboBoostGoal > _TBoost and _Tune.T_SpoolUpTime or _Tune.T_SpoolDownTime
+				_TBoost = MoveToward(_TBoost, turboBoostGoal, StepForTime(dt, spoolTime, turboMaxBoost))
+				
 				TTorque = _TBoost * _Tune.T_Efficiency
-				_TH, _TT = (TTorque*x)/5.252, TTorque
+				_TH, _TT = (TTorque * x) / 5.252, TTorque
 			end
+			
 			if _Tune.Superchargers > 0 then
-				local SIdleBoost = f(_Tune.IdleRPM/1000, _Tune.S_IdleBoost, _Tune.S_PeakRPM/1000, _Tune.S_Boost, _Tune.S_Boost, _Tune.S_IdleCurve, x)
-				local SRedlineBoost = f(_Tune.S_PeakRPM/1000, _Tune.S_Boost, _Tune.Redline/1000, _Tune.S_RedlineBoost, _Tune.S_Boost, 1/_Tune.S_RedlineCurve, x)
-				local _SBoostGoal = _Tune.Superchargers * _GThrot * (_Tune.S_Boost - SIdleBoost - SRedlineBoost)
-				if _SBoostGoal > _SBoost then
-					_SBoost = math.min(_SBoost + _Tune.S_Boost*_Tune.S_Response*deltaTime, _SBoostGoal)
-				elseif _SBoost > _SBoostGoal then
-					_SBoost = math.max(_SBoost - _Tune.S_Boost*_Tune.S_Response*deltaTime, _SBoostGoal)
-				end
+				local SIdleBoost = f(_Tune.IdleRPM / 1000, _Tune.S_IdleBoost, _Tune.S_PeakRPM / 1000, _Tune.S_Boost, _Tune.S_Boost, _Tune.S_IdleCurve, x)
+				local SRedlineBoost = f(_Tune.S_PeakRPM / 1000, _Tune.S_Boost, _Tune.Redline / 1000, _Tune.S_RedlineBoost, _Tune.S_Boost, 1 / _Tune.S_RedlineCurve, x)
+				
+				local superMaxBoost = _Tune.Superchargers * _Tune.S_Boost
+				local superBoostGoal = _Tune.Superchargers * _GThrot * (_Tune.S_Boost - SIdleBoost - SRedlineBoost)
+				superBoostGoal = math.clamp(superBoostGoal, 0, superMaxBoost)
+				
+				_SBoost = MoveToward(_SBoost, superBoostGoal, StepForTime(dt, _Tune.S_ResponseTime, superMaxBoost))
+				
 				STorque = _SBoost * _Tune.S_Efficiency
-				_SH, _ST = (STorque*x)/5.252, STorque
+				_SH, _ST = (STorque * x) / 5.252, STorque
 			end
+			
 			if _Tune.Turbochargers > 0 or _Tune.Superchargers > 0 then
-				_BH, _BT = ((TTorque+STorque)*x)/5.252, TTorque+STorque
+				_BH, _BT = ((TTorque + STorque) * x) / 5.252, TTorque + STorque
 			end
 		end
+		
 		if _Tune.Electric then
 			ETorque = 1 * (_Tune.E_Torque - f(_Tune.E_TransitionRPM/1000, _Tune.E_Torque, _Tune.E_Redline/1000, _Tune.E_RedlineTorque, _Tune.E_Torque, _Tune.E_Curve, x))
 			_EH, _ET = (ETorque*x)/5.252, ETorque
@@ -1578,3 +1592,5 @@ local function SlowRuntimeLoop()
 end
 
 task.spawn(SlowRuntimeLoop)
+
+script:SetAttribute("Loaded", true)
