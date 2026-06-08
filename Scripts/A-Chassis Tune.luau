@@ -6,7 +6,7 @@
 	 | |_) |     | |____| | | | (_| \__ \__ \ \__ \
 	 |____/       \_____|_| |_|\__,_|___/___/_|___/
 	 
-	Version 1                                               
+	Version 1
 --]]
 
 local Tune = {}
@@ -202,7 +202,9 @@ local Tune = {}
 	Tune.Config			= "AWD"		-- "FWD" , "RWD" , "AWD"
 	Tune.TorqueVector	= 0.2		-- AWD ONLY, "-1" has a 100% front bias, "0" has a 50:50 bias, and "1" has a 100% rear bias. Can be any number between that range.
 	
-	-- Options for a limited slip differential (LuaInt)
+	Tune.CustomDifferentialCalculations = false 	-- Enables the use of the CustomDifferential module.
+	
+	-- Options for a limited slip differential (LuaInt)	
 	-- *You can set all of these values to 0 to achieve an open differential.
 	Tune.FDiffPower		= 20		-- 0 - 100				Higher values yield more wheel lock-up under throttle, more stability (Front wheels, only if driven)
 	Tune.FDiffCoast		= 60		-- 0 - 100				Higher values yield more wheel lock-up when off throttle, more stability (Front wheels, only if driven)
