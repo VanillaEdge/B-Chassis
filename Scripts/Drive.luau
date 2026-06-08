@@ -161,7 +161,9 @@ local _Shifting = false
 local _StallTimer = 0
 local _spLimit = 0
 
-local engine = car["A-Chassis Tune"].README:FindFirstChild("CustomEngine") and require(car["A-Chassis Tune"].README:FindFirstChild("CustomEngine")) or nil
+local readme = car["A-Chassis Tune"].README
+local engine = readme:FindFirstChild("CustomEngine") and require(readme:FindFirstChild("CustomEngine")) or nil
+local differential = readme:FindFirstChild("CustomDifferential") and require(readme:FindFirstChild("CustomDifferential")) or nil
 
 local _Boost = 0
 local _TBoost = 0
@@ -895,7 +897,6 @@ local function Gear()
 end
 
 local goalRPM = 0
-local tqTCS = 1
 
 -- Power calculation prerequesites
 local function f(m: number, n: number, p: number, q: number, M: number, b: number, x: number): number
@@ -1133,11 +1134,11 @@ local function Engine(dt: number)
 			_CGear = _CGear,
 
 		}, dt)
-
+		
 		_Boost = engine._Boost
 		_TBoost = engine._TBoost
 		_SBoost = engine._SBoost
-
+		
 		_HP = engine._HP
 		_TQ = engine._TQ
 		_NH = engine._NH
@@ -1162,7 +1163,7 @@ local function Engine(dt: number)
 	_OutTorque = _TQ * _CurrentRatio * _Tune.FinalDrive
 	local iComp = (_Center.LookVector.Y)*cGrav*math.sign(_CGear)
 	_OutTorque = _OutTorque*math.max(1,(1+iComp))
-
+	
 	-- Brakes
 	local FBrakeForce =_Tune.BrakeForce * 9.80665 * Units.Force_N * _Tune.BrakeBias -- luaint edit, conversion to SI unit Detomiks
 	local RBrakeForce =_Tune.BrakeForce * 9.80665 * Units.Force_N * (1 - _Tune.BrakeBias) -- luaint edit
@@ -1174,119 +1175,115 @@ local function Engine(dt: number)
 		-- Apply Power
 		local PBrakeV = (_PBrake == true or _CGear == -2) and 1 or 0
 		local on = _IsOn and 1 or 0
-
+		
 		local throt = _GThrot
 		local brake = _GBrake
-
+		
 		local clutch = 1
 		if _ClPressing or (_AutoClutch and _Starting) then
 			clutch = 0
 		end
-
+		
 		-- Apply ESC
 		local tqESC = 0
-		if not (data.Name == "F" or data.Name == "R") and _ESC and (_Velocity.Magnitude/(Units.Velocity_mdivs/3.6)) > _Tune.ESCSpeed then
-			local g = weightBrick.CFrame:VectorToObjectSpace(_Acceleration/(Units.Velocity_mdivs)/((_Tune.GravComp>0 and _Tune.GravComp or workspace.Gravity)*(Units.Length_mm/1000)))
+		if not (data.Name == "F" or data.Name == "R") and _ESC and (_Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)) > _Tune.ESCSpeed then
+			local g = weightBrick.CFrame:VectorToObjectSpace(_Acceleration / (Units.Velocity_mdivs) / ((_Tune.GravComp > 0 and _Tune.GravComp or workspace.Gravity) * (Units.Length_mm / 1000)))
 			if math.sign(_GSteerC) ~= math.sign(g.X) then
-				local diff = _GSteerC-(g.X*-math.sign(_Center:VectorToObjectSpace(_Velocity).Z))
+				local diff = _GSteerC - (g.X * -math.sign(_Center:VectorToObjectSpace(_Velocity).Z))
 				if math.abs(diff) > _Tune.ESCThreshold then
-					local escVector, escBias = 1, (_Tune.ESCVector+1)
-					if data.isFront then 
-						escVector = escVector*(2-escBias)
-					else 
-						escVector = escVector*escBias 
+					local escVector, escBias = 1, (_Tune.ESCVector + 1)
+					if data.isFront then
+						escVector = escVector * (2 - escBias)
+					else
+						escVector = escVector * escBias
 					end
-
-					tqESC = ((data.Name == "FL" or data.Name == "RL") and 1 or -1) * math.sign(diff)*escVector
-					throt = throt + (math.max(tqESC,0) - throt) * (_Tune.ESCThrottle/100)
-					brake = brake + (-math.min(tqESC,0) - brake) * (_Tune.ESCBrake/100)
+					
+					tqESC = ((data.Name == "FL" or data.Name == "RL") and 1 or -1) * math.sign(diff) * escVector
+					throt = throt + (math.max(tqESC, 0) - throt) * (_Tune.ESCThrottle / 100)
+					brake = brake + (-math.min(tqESC, 0) - brake) * (_Tune.ESCBrake / 100)
 				end
 			end
 		end
-
+		
 		_ESCActive = tqESC ~= 0 or _ESCActive
 		_ESCTracker[data.Name] = tqESC
-
+		
+		-- Apply Differential
+		local output = {
+			Power = data.driven and throt or 0,
+			Brake = brake,
+			Torque = 1,
+			Speed = data.driven and math.sign(_CGear) or 0,
+		}
+		
+		if data.driven then
+			if data.OppositeWheel then
+				local power = data.isFront and _Tune.FDiffPower or _Tune.RDiffPower
+				local coast = data.isFront and _Tune.FDiffCoast or _Tune.RDiffCoast
+				local preload = data.isFront and _Tune.FDiffPreload or _Tune.RDiffPreload
+				
+				local oppositeSpeed = math.max(data.OppositeWheel.RotVelocity.Magnitude, 0.001)
+				local avg = ((data.RotVelocityMagnitude / oppositeSpeed) - 1) * (preload / 10)
+				
+				output.Torque = math.ceil(math.max(0, math.min(2, 1 - (((power / 100) * avg * output.Power) + ((coast / 100) * avg * (1 - output.Power))))) * 100) / 100
+			end
+			
+			if differential and _Tune.CustomDifferentialCalculations ~= false then
+				output = differential.run({
+					_GThrot = output.Power,
+					_GBrake = output.Brake,
+					_GSteerC = _GSteerC,
+					_GSteerT = _GSteerT,
+					_CGear = _CGear,
+					_spLimit = _spLimit,
+					_Velocity = _Velocity,
+					_Config = _Tune.Config,
+					
+					Wheel = data,
+					Default = output,
+				}, dt)
+			end
+		end
+		
 		-- Apply ABS
 		local tqABS = 1
-		if _ABS and brake>0 then
-			tqABS = 1-(math.min(math.max(0,math.abs(data.RotVelocityMagnitude*(data.Size.Y/2)/(Units.Velocity_mdivs/3.6) - data.WheelVelocityMagnitude/(Units.Velocity_mdivs/3.6))-_Tune.ABSThreshold)/_Tune.ABSGradient,1)*(1-(_Tune.ABSLimit/100)))
+		if _ABS and output.Brake > 0 then
+			tqABS = 1 - (math.min(math.max(0, math.abs(data.RotVelocityMagnitude * (data.Size.Y / 2) / (Units.Velocity_mdivs / 3.6) - data.WheelVelocityMagnitude / (Units.Velocity_mdivs / 3.6)) - _Tune.ABSThreshold) / _Tune.ABSGradient, 1) * (1 - (_Tune.ABSLimit / 100)))
 		end
+		
 		_ABSActive = tqABS < 1 or _ABSActive
 		_ABSTracker[data.Name] = 1 - tqABS
-
-		-- Apply Power
+		
+		-- Apply TCS
+		local tqTCS = 1
+		if data.driven and _TCS and output.Power > 0.01 then
+			tqTCS = 1 - (math.min(math.max(0, math.abs(data.RotVelocityMagnitude * (data.Size.Y / 2) / (Units.Velocity_mdivs / 3.6) - data.WheelVelocityMagnitude / (Units.Velocity_mdivs / 3.6)) - _Tune.TCSThreshold) / _Tune.TCSGradient, 1) * (1 - (_Tune.TCSLimit / 100)))
+		end
+		
 		if data.driven then
-			-- Differential/Torque-Vectoring
-			local RRdiffMult=1
-			local RLdiffMult=1
-			local FRdiffMult=1
-			local FLdiffMult=1
-
-			if data.Name=="FR" then
-				local avg=((data.RotVelocityMagnitude/data.OppositeWheel.RotVelocity.Magnitude)-1)*(_Tune.FDiffPreload/10)
-				FRdiffMult=math.ceil(math.max(0,math.min(2,1-( ((_Tune.FDiffPower/100)*avg*_GThrot) + ((_Tune.FDiffCoast/100)*avg*(1-_GThrot)))))*100)/100
-				FLdiffMult=2-FRdiffMult
-			elseif data.Name=="FL" then
-				local avg=((data.RotVelocityMagnitude/data.OppositeWheel.RotVelocity.Magnitude)-1)*(_Tune.FDiffPreload/10)
-				FLdiffMult=math.ceil(math.max(0,math.min(2,1-( ((_Tune.FDiffPower/100)*avg*_GThrot) + ((_Tune.FDiffCoast/100)*avg*(1-_GThrot)))))*100)/100
-				FRdiffMult=2-FLdiffMult
-			elseif data.Name=="RR" then
-				local avg=((data.RotVelocityMagnitude/data.OppositeWheel.RotVelocity.Magnitude)-1)*(_Tune.RDiffPreload/10)
-				RRdiffMult=math.ceil(math.max(0,math.min(2,1-( ((_Tune.RDiffPower/100)*avg*_GThrot) + ((_Tune.RDiffCoast/100)*avg*(1-_GThrot)))))*100)/100
-				RLdiffMult=2-RRdiffMult
-			elseif data.Name=="RL" then
-				local avg=((data.RotVelocityMagnitude/data.OppositeWheel.RotVelocity.Magnitude)-1)*(_Tune.RDiffPreload/10)
-				RLdiffMult=math.ceil(math.max(0,math.min(2,1-( ((_Tune.RDiffPower/100)*avg*_GThrot) + ((_Tune.RDiffCoast/100)*avg*(1-_GThrot)))))*100)/100
-				RRdiffMult=2-RLdiffMult
-			end
-
-			-- Apply torque split
-			-- This takes the total amount of torque alotted to the front or rear wheels, then divides it by how many wheels there are
-			local bias = (_Tune.Config == "AWD" and (_Tune.TorqueVector+1)/2) or (_Tune.Config == "FWD" and 0) or 1
-			local tq = data.isFront and (_OutTorque * (1 - bias)) / FWheelCount or (_OutTorque * bias) / RWheelCount
-
-			-- Apply TCS
-			tqTCS = 1
-			if _TCS and throt > 0.01 then
-				tqTCS = 1 - (math.min(math.max(0, math.abs(data.RotVelocityMagnitude * (data.Size.Y / 2) / (Units.Velocity_mdivs / 3.6) - data.WheelVelocityMagnitude / (Units.Velocity_mdivs / 3.6)) - _Tune.TCSThreshold) / _Tune.TCSGradient, 1) * (1 - (_Tune.TCSLimit / 100)))
-			end
 			_TCSActive = tqTCS < 1 or _TCSActive
 			_TCSTracker[data.Name] = 1 - tqTCS
-
-			-- Update Forces
-			local tqOUT = ((tq * 1.356 * Units.Torque_nm * tqTCS * clutch) + (_FlywheelEnergy / #Drive)) * throt * on
-			
-			-- convert lb-ft to nm to roblox stuff
-			-- if it reaches an absurdly high number, set it to 0 to try and prevent physics death
-			
-			if data.Name=='RR' then
-				data.AV.MotorMaxTorque=tqOUT*RRdiffMult
-			elseif data.Name=='RL' then
-				data.AV.MotorMaxTorque=tqOUT*RLdiffMult
-			elseif data.Name=='FR' then
-				data.AV.MotorMaxTorque=tqOUT*FRdiffMult
-			elseif data.Name=='FL' then
-				data.AV.MotorMaxTorque=tqOUT*FLdiffMult
-			else
-				data.AV.MotorMaxTorque=tqOUT
-			end
-			
-			data.AV.AngularVelocity = _spLimit * math.sign(_CGear)
-			if data.isFront then
-				data.BV.MotorMaxTorque = (FBrakeForce*brake*tqABS) + (_Tune.EBrakeForce*clutch*((1-throt)*(_RPM/_Tune.Redline))) + (PBrakeForceF*PBrakeV)
-			else
-				data.BV.MotorMaxTorque = (RBrakeForce*brake*tqABS) + (_Tune.EBrakeForce*clutch*((1-throt)*(_RPM/_Tune.Redline))) + (PBrakeForceR*PBrakeV)
-			end
-		else -- luaint edit
-			data.AV.MotorMaxTorque=0
-			data.AV.AngularVelocity=0
-			if data.isFront then
-				data.BV.MotorMaxTorque = (FBrakeForce*brake*tqABS) + (PBrakeForceF*PBrakeV)
-			else
-				data.BV.MotorMaxTorque = (RBrakeForce*brake*tqABS) + (PBrakeForceR*PBrakeV)
-			end
 		end
+		
+		-- Apply Drive
+		if data.driven then
+			local bias = (_Tune.Config == "AWD" and (_Tune.TorqueVector + 1) / 2) or (_Tune.Config == "FWD" and 0) or 1
+			local tq = data.isFront and (_OutTorque * (1 - bias)) / FWheelCount or (_OutTorque * bias) / RWheelCount
+			local tqOUT = ((tq * 1.356 * Units.Torque_nm * tqTCS * clutch) + (_FlywheelEnergy / #Drive)) * output.Power * on
+			
+			data.AV.MotorMaxTorque = tqOUT * output.Torque
+			data.AV.AngularVelocity = math.abs(_spLimit) * output.Speed
+		else
+			data.AV.MotorMaxTorque = 0
+			data.AV.AngularVelocity = 0
+		end
+		
+		-- Apply Brakes
+		local brakeForce = data.isFront and FBrakeForce or RBrakeForce
+		local pBrakeForce = data.isFront and PBrakeForceF or PBrakeForceR
+		local eBrakeForce = data.driven and (_Tune.EBrakeForce * clutch * ((1 - output.Power) * (_RPM / _Tune.Redline))) or 0
+		
+		data.BV.MotorMaxTorque = (brakeForce * output.Brake * tqABS) + eBrakeForce + (pBrakeForce * PBrakeV)
 	end
 end
 
@@ -1471,7 +1468,7 @@ onLastInputTypeChanged(UserInputService:GetLastInputType())
 UserInputService.LastInputTypeChanged:Connect(onLastInputTypeChanged)
 
 -- Print Version
-print("A-Chassis, Version " .. require(car["A-Chassis Tune"].README))
+print("A-Chassis, Version " .. require(readme))
 
 -- Runtime Loops
 local function RuntimeLoop(dt: number)
