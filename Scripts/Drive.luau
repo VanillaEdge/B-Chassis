@@ -1413,7 +1413,7 @@ end
 
 -- Flip
 local function Flip()
-	local isUpright = driveSeat.CFrame.UpVector.Y > 0.1
+	local isUpright = weightBrick.CFrame.UpVector.Y > 0.1
 	if isUpright then
 		_FlipWait = os.clock()
 		return
