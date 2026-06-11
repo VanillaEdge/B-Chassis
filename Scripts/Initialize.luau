@@ -89,25 +89,33 @@ for i, descendant in car:GetDescendants() do
 end
 
 --[[Wheel Configuration]]
-local function GetCarCenter()
+local function GetCarCenter(dist: number ?): CFrame
+	dist = dist or 0.5
+	
 	local centerF = Vector3.new()
 	local centerR = Vector3.new()
 	local countF = 0
 	local countR = 0
-	for i,v in Wheels do
-		if not v:IsA("BasePart") then continue end
-		if v.Name=="FL" or v.Name=="FR" or v.Name=="F" then
-			centerF = centerF+v.CFrame.p
-			countF = countF+1
+	
+	for i, v in Wheels do
+		if not v:IsA("BasePart") then 
+			continue 
+		end
+		
+		if v.Name == "FL" or v.Name == "FR" or v.Name == "F" then
+			centerF += v.Position
+			countF += 1
 		else
-			centerR = centerR+v.CFrame.p
-			countR = countR+1
+			centerR += v.Position
+			countR += 1
 		end
 	end
-	centerF = centerF/countF
-	centerR = centerR/countR
-	local center = CFrame.lookAt(centerR:Lerp(centerF,.5),centerF)
-	return center
+	
+	centerF /= countF
+	centerR /= countR
+	
+	local pos = centerR:Lerp(centerF, dist)
+	return CFrame.lookAt(pos, pos + centerF - centerR)
 end
 
 --PGS/Legacy
@@ -384,26 +392,7 @@ end
 getMass(car)
 
 --Apply Vehicle Weight
-if mass*Units.Mass_kg < Tune.Weight*0.453592 then
-	--Calculate Weight Distribution
-	local centerF = Vector3.new()
-	local centerR = Vector3.new()
-	local countF = 0
-	local countR = 0
-
-	for i, v in (Drive) do
-		if v.Name=="FL" or v.Name=="FR" or v.Name=="F" then
-			centerF = centerF+v.CFrame.p
-			countF = countF+1
-		else
-			centerR = centerR+v.CFrame.p
-			countR = countR+1
-		end
-	end
-	centerF = centerF/countF
-	centerR = centerR/countR
-	local center = centerR:Lerp(centerF, Tune.WeightDist/100) 
-
+if mass * Units.Mass_kg < Tune.Weight * 0.453592 then
 	--Create Weight Brick
 	local weightB = Instance.new("Part")
 	weightB.Name = "#Weight"
@@ -412,19 +401,14 @@ if mass*Units.Mass_kg < Tune.Weight*0.453592 then
 	weightB.BrickColor = BrickColor.new("Really black")
 	weightB.TopSurface = Enum.SurfaceType.Smooth
 	weightB.BottomSurface = Enum.SurfaceType.Smooth
-	if Tune.WBVisible then
-		weightB.Transparency = .75			
-	else
-		weightB.Transparency = 1			
-	end
+	weightB.Transparency = Tune.WBVisible and 0.75 or 1
 
-	weightB.Size = Vector3.new(Tune.WeightBSize[1], Tune.WeightBSize[2], Tune.WeightBSize[3])/Units.Length_mm
-	local tdensity = (Tune.Weight*Units.Mass_kg - mass)/(weightB.Size.X*weightB.Size.Y*weightB.Size.Z) --fixed by denkodin
+	weightB.Size = Vector3.new(Tune.WeightBSize[1], Tune.WeightBSize[2], Tune.WeightBSize[3]) / Units.Length_mm
+	local tdensity = (Tune.Weight * Units.Mass_kg - mass) / (weightB.Size.X * weightB.Size.Y * weightB.Size.Z) --fixed by denkodin
 	weightB.CustomPhysicalProperties = PhysicalProperties.new(math.clamp(tdensity, 0.01, 100), 0, 0, 0, 0)
-	--Real life mass in pounds, converted to kg minus existing roblox mass converted to kg, divided by volume of the weight brick in cubic meters, divided by the density of water
-	weightB.CFrame = (car.DriveSeat.CFrame-car.DriveSeat.Position+center)*CFrame.new(0, Tune.CGHeight, 0)
+	weightB.CFrame = GetCarCenter(Tune.WeightDist / 100) * CFrame.new(0, Tune.CGHeight, 0)
 	weightB.Parent = car.Body
-
+	
 	--Density Cap
 	if weightB.CustomPhysicalProperties.Density>=100 then
 		warn( "\n\t [A-Chassis ".._BuildVersion.."]: Density too high for specified volume."
@@ -463,11 +447,13 @@ end
 
 -- Flip
 do
+	local weightB = car.Body:WaitForChild("#Weight") :: BasePart
+	
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "FlipAttachment"
-	attachment.Axis = Vector3.new(0, 1, 0)
+	attachment.Axis = car.DriveSeat.CFrame:VectorToObjectSpace(weightB.CFrame.UpVector)
 	attachment.Parent = car.DriveSeat
-
+	
 	local alignOrientation = Instance.new("AlignOrientation")
 	alignOrientation.Name = "Flip"
 	alignOrientation.Enabled = false
@@ -475,7 +461,7 @@ do
 	alignOrientation.AlignType = Enum.AlignType.PrimaryAxisParallel
 	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
 	alignOrientation.Attachment0 = attachment
-	alignOrientation.PrimaryAxis = Vector3.new(0, 1, 0)
+	alignOrientation.PrimaryAxis = Vector3.yAxis
 	alignOrientation.Parent = car.DriveSeat
 end
 
