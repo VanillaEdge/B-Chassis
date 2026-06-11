@@ -25,40 +25,16 @@ local function MakeWeldConstraint(x, y)
 	return W
 end
 
-local function MakeWeld(x, y, type, s) 
-	if type==nil then type="Weld" end
-	if type == "Weld" then
-		return MakeWeldConstraint(x, y)
+local function ModelWeld(model: Instance, target: BasePart)
+	if model:IsA("BasePart") then 
+		MakeWeldConstraint(target, model) 
 	end
-	local W=Instance.new(type) 
-	W.Part0=x W.Part1=y 
-	W.C0=x.CFrame:inverse()*x.CFrame 
-	W.C1=y.CFrame:inverse()*x.CFrame 
-	W.Parent = x
-	if type=="Motor" and s~=nil then 
-		W.MaxVelocity=s 
-	end 
-	return W	
-end
 
-local function ModelWeld(a, b) 
-	if a:IsA("BasePart") then 
-		MakeWeld(b, a) 
-	end 
-	for _, v in a:GetDescendants() do
-		if v:IsA("BasePart") then
-			MakeWeld(v, b)
+	for i, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			MakeWeldConstraint(part, target)
 		end
 	end
-end
-
-local function Unanchor(a) 
-	if a:IsA("BasePart") then a.Anchored=false end 
-	for i, v in (a:GetDescendants()) do 
-		if v:IsA("BasePart") then
-			v.Anchored = false 
-		end
-	end 
 end
 
 --[[Initialize]]
@@ -202,7 +178,7 @@ for _, v in Drive do
 	axlep.Name = 'AxleP'
 	axlep.CFrame = v.CFrame
 	axlep.Parent = v
-	MakeWeld(axlep, axle)
+	MakeWeldConstraint(axlep, axle)
 
 	--Create Suspension
 	local SuspensionGeometry = v:FindFirstChild("SuspensionGeometry")
@@ -223,10 +199,10 @@ for _, v in Drive do
 			end
 		end
 		
-		MakeWeld(SuspensionGeometry.Hub, base)
+		MakeWeldConstraint(SuspensionGeometry.Hub, base)
 		
 		if SuspensionGeometry:FindFirstChild("SpringTop") then
-			MakeWeld(SuspensionGeometry.SpringTop, car.DriveSeat)
+			MakeWeldConstraint(SuspensionGeometry.SpringTop, car.DriveSeat)
 		end
 		
 		local spring = SuspensionGeometry:FindFirstChild("Spring")
@@ -249,17 +225,17 @@ for _, v in Drive do
 		if SuspensionGeometry then
 			SuspensionGeometry:ClearAllChildren()
 		end
-		MakeWeld(car.DriveSeat, base)
+		MakeWeldConstraint(car.DriveSeat, base)
 	end
 	
 	--Lock Rear Steering Axle
 	if (Tune.FWSteer=='Static' or Tune.FWSteer=='Speed' or Tune.FWSteer=='Both') == false then
 		if v.Name == "RL" or v.Name == "RR" or v.Name=="R" then
-			MakeWeld(base, axle)
+			MakeWeldConstraint(base, axle)
 		end
 	end
 
-	MakeWeld(arm, axle)
+	MakeWeldConstraint(arm, axle)
 
 	--Weld Miscelaneous Parts
 	if v:FindFirstChild("SuspensionFixed")~=nil then
@@ -466,22 +442,22 @@ do
 end
 
 --[[Finalize Chassis]]	
-task.wait()
-
 --Misc Weld
-for i, v in (script:GetChildren()) do
+for i, v in script:GetChildren() do
 	if v:IsA("ModuleScript") then
 		require(v)
 	end
 end
 
 --Weld Body
-task.wait()
 ModelWeld(car.Body, car.DriveSeat)
 
 --Unanchor
-task.wait()
-Unanchor(car)
+for i, v in car:GetDescendants() do
+	if v:IsA("BasePart") then
+		v.Anchored = false
+	end
+end
 
 --[[Manage Plugins]]
 task.wait()
@@ -503,14 +479,6 @@ for i, v in plugins:GetChildren() do
 end
 
 plugins:Destroy()
-
-local function shutdown(player)
-	for _, child in player.PlayerGui:GetChildren() do
-		if child.Name == "A-Chassis Interface" then
-			child:Destroy()
-		end
-	end
-end
 
 --[[Remove Character Weight]]
 
@@ -540,7 +508,7 @@ local function handleCharacter(character, tbl)
 	end
 end
 
---Apply Seat Handler
+-- Apply Seat Handler
 for _, data in Seats do
 	local seatObject = data.Seat :: Seat
 	local parts = data.Parts
@@ -560,8 +528,12 @@ end
 
 --[[Destroying Cleanup]]
 seat.AncestryChanged:Connect(function()
-	if seat.Parent then return end
+	if seat.Parent then 
+		return 
+	end
+	
 	task.wait(10) -- Delay for clients to finish up
+	
 	if car then
 		car:Destroy()
 	end
@@ -573,7 +545,9 @@ end)
 seat.ChildAdded:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
 		local player = Players:GetPlayerFromCharacter(child.Part1.Parent)
-		if not player then return end
+		if not player then 
+			return 
+		end
 		
 		car.DriveSeat:SetNetworkOwner(player)
 
@@ -585,8 +559,9 @@ end)
 --Driver Leave
 seat.ChildRemoved:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
-		-- Safety check in case vehicle destroying
-		if not seat.Parent then return end
+		if not seat.Parent then 
+			return 
+		end
 
 		-- Remove Flip Force
 		if seat:FindFirstChild("Flip") then
@@ -619,11 +594,15 @@ seat.ChildRemoved:Connect(function(child: Instance)
 end)
 
 --Driver mental breakdown
-shutdownEvent.OnServerEvent:Connect(function(player)
-	if not player:FindFirstChild("PlayerGui") then return end
-	for _, v in player.PlayerGui:GetChildren() do
-		if v.Name ~= "A-Chassis Interface" then continue end
-		v:Destroy()
+shutdownEvent.OnServerEvent:Connect(function(player: Player)
+	if not player:FindFirstChild("PlayerGui") then 
+		return 
+	end
+	
+	for i, v in player.PlayerGui:GetChildren() do
+		if v.Name == "A-Chassis Interface" then 
+			v:Destroy() 
+		end
 	end
 end)
 
