@@ -16,6 +16,15 @@ local Tune = {}
 	Tune.AutoStart		= false		    -- Set to false if using manual ignition plugin
 	Tune.AutoFlip		= true		    -- Set to false if using manual flip plugin
 	Tune.Mobile			= true			-- Set to false if using a 3rd party mobile support method.
+
+--[[Controls]]
+	Tune.CustomInputContextEnabled = false	-- Enables a custom InputContext for vehicle controls
+	Tune.CustomInputContexPath = nil 		-- Hierachy must match the default InputContext
+	
+	-- Example: Tune.CustomInputContexPath = game:GetService("ReplicatedStorage").Inputs.VehicleContext :: InputContext
+	
+	Tune.MouseSteerLimit = 70		-- Mouse distance from center for full steering, in % of half screen width (0 - 100)
+	Tune.MouseSteerDeadzone = 5		-- Mouse distance from center before steering starts, in % of half screen width (0 - 100)
 	
 --[[Wheel Alignment]]
 	--[Values are in degrees]
@@ -32,7 +41,7 @@ local Tune = {}
 		--[[Width]]			1900	,
 		--[[Height]]		1303	,
 		--[[Length]]		4545	}
-	Tune.WeightDist		= 44		-- Weight distribution (0 - on rear wheels, 100 - on front wheels, can be <0 or >100)
+	Tune.WeightDist		= 50		-- Weight distribution (0 - on rear wheels, 100 - on front wheels, can be <0 or >100)
 	Tune.CGHeight		= 0.12		-- Center of gravity height (studs relative to average of all wheels)
 	Tune.WBVisible		= false		-- Makes the weight brick visible
 	
@@ -208,10 +217,10 @@ local Tune = {}
 	-- *You can set all of these values to 0 to achieve an open differential.
 	Tune.FDiffPower		= 20		-- 0 - 100				Higher values yield more wheel lock-up under throttle, more stability (Front wheels, only if driven)
 	Tune.FDiffCoast		= 60		-- 0 - 100				Higher values yield more wheel lock-up when off throttle, more stability (Front wheels, only if driven)
-	Tune.FDiffPreload	= 40		-- 0 - 100				Higher values will make the wheels generally lock up faster in any environment (Front wheels, only if driven)
+	Tune.FDiffPreload	= 40		-- 0 - 10				Higher values will make the wheels generally lock up faster in any environment (Front wheels, only if driven)
 	Tune.RDiffPower		= 20		-- 0 - 100				(Rear wheels, only if driven)
 	Tune.RDiffCoast		= 60		-- 0 - 100				(Rear wheels, only if driven)
-	Tune.RDiffPreload	= 40		-- 0 - 100				(Rear wheels, only if driven)
+	Tune.RDiffPreload	= 40		-- 0 - 10				(Rear wheels, only if driven)
 	
 	-- Traction Control Settings
 	Tune.TCSEnabled		= true		-- Implements TCS
@@ -315,68 +324,5 @@ local Tune = {}
 	Tune.PBrakeForce	= 1000		-- Handbrake force in kgf
 	Tune.PBrakeBias		= 0			-- Handbrake bias towards the front, percentage (1 = Front, 0 = Rear, .5 = 50/50)
 	Tune.EBrakeForce	= 500		-- Engine braking force at redline in kgf
-	
---[[[Default Controls]]
-	--Peripheral Deadzones
-	Tune.Peripherals = {
-		MSteerWidth				= 67		,	-- Mouse steering control width	(0 - 100% of screen width)
-		MSteerDZone				= 10		,	-- Mouse steering deadzone (0 - 100%)
-		
-		ControlLDZone			= 5			,	-- Controller steering L-deadzone (0 - 100%)
-		ControlRDZone			= 5			,	-- Controller steering R-deadzone (0 - 100%)
-	}
-	
-	--Control Mapping
-	Tune.Controls = {
-		
-		--Keyboard Controls
-		--Mode Toggles
-		ToggleTCS				= Enum.KeyCode.T					,
-		ToggleABS				= Enum.KeyCode.Y					,
-		ToggleCS				= Enum.KeyCode.U					,
-		ToggleTransMode			= Enum.KeyCode.M					,
-		ToggleMouseDrive		= Enum.KeyCode.R					,
-		
-		--Primary Controls
-		Throttle				= Enum.KeyCode.Up					,
-		Brake					= Enum.KeyCode.Down					,
-		SteerLeft				= Enum.KeyCode.Left					,
-		SteerRight				= Enum.KeyCode.Right				,
-		
-		--Secondary Controls
-		Throttle2				= Enum.KeyCode.W					,
-		Brake2					= Enum.KeyCode.S					,
-		SteerLeft2				= Enum.KeyCode.A					,
-		SteerRight2				= Enum.KeyCode.D					,
-		
-		--Manual Transmission
-		ShiftUp					= Enum.KeyCode.E					,
-		ShiftDown				= Enum.KeyCode.Q					,
-		Clutch					= Enum.KeyCode.LeftShift			,
-		
-		--Handbrake
-		PBrake					= Enum.KeyCode.P					,
-		
-		--Mouse Controls
-		MouseThrottle			= Enum.UserInputType.MouseButton1	,
-		MouseBrake				= Enum.UserInputType.MouseButton2	,
-		MouseClutch				= Enum.KeyCode.W					,
-		MouseShiftUp			= Enum.KeyCode.E					,
-		MouseShiftDown			= Enum.KeyCode.Q					,
-		MousePBrake				= Enum.KeyCode.LeftShift			,
-		
-		--Controller Mapping
-		ContlrThrottle			= Enum.KeyCode.ButtonR2				,
-		ContlrBrake				= Enum.KeyCode.ButtonL2				,
-		ContlrSteer				= Enum.KeyCode.Thumbstick1			,
-		ContlrShiftUp			= Enum.KeyCode.ButtonY				,
-		ContlrShiftDown			= Enum.KeyCode.ButtonX				,
-		ContlrClutch			= Enum.KeyCode.ButtonR1				,
-		ContlrPBrake			= Enum.KeyCode.ButtonL1				,
-		ContlrToggleTMode		= Enum.KeyCode.DPadUp				,
-		ContlrToggleTCS			= Enum.KeyCode.DPadDown				,
-		ContlrToggleABS			= Enum.KeyCode.DPadRight			,
-		ContlrToggleCS			= Enum.KeyCode.DPadLeft				,
-	}
 	
 return Tune
