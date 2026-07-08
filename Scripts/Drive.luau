@@ -10,14 +10,11 @@
 --]]
 
 -- Dependencies
-local UserInputService = game:GetService("UserInputService")
-local TextChatService = game:GetService("TextChatService")
-local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
+local camera = workspace.CurrentCamera :: Camera
 local player = Players.LocalPlayer :: Player
-local mouse = player:GetMouse()
 
 local car = script.Parent.Car.Value
 local values = script.Parent.Values
@@ -25,25 +22,20 @@ local values = script.Parent.Values
 local _Tune = require(car["A-Chassis Tune"])
 local Units = require(car["A-Chassis Tune"].README.Units)
 local InterfaceValues = car["A-Chassis Tune"]["A-Chassis Interface"].Values
-local VirtualInput = script:FindFirstChild("VirtualInput")
+
+local VehicleContext = ((_Tune.CustomInputContextEnabled and _Tune.CustomInputContexPath) or script.Parent.VehicleContext) :: InputContext
+local MoveAction = VehicleContext.MoveAction :: InputAction
+local ViewportAction = VehicleContext.ViewportAction :: InputAction
+
+local ReadMe = car["A-Chassis Tune"].README
+local EngineModule = ReadMe:FindFirstChild("CustomEngine") and require(ReadMe:FindFirstChild("CustomEngine")) or nil
+local DifferentialModule = ReadMe:FindFirstChild("CustomDifferential") and require(ReadMe:FindFirstChild("CustomDifferential")) or nil
 
 if _Tune.Mobile then
 	player.PlayerGui.ScreenOrientation = Enum.ScreenOrientation.LandscapeSensor
-	GuiService.TouchControlsEnabled = false
 end
 
-local MobileMode = "Tap"
-local MobileModes = {"Tap", "Tilt"}
-local MobileUI = script.Parent.Mobile
-local MobileUIChildren = MobileUI:GetChildren()
-local LastInputWasMobile = UserInputService:GetLastInputType() == Enum.UserInputType.Touch
-
-local LastInputWasGamepad = string.find(UserInputService:GetLastInputType().Name, "Gamepad") and true or false
-local ChatInputBarConfiguration = TextChatService.ChatInputBarConfiguration
-
-local GlobalTemperature = workspace:GetAttribute("GlobalTemperature") or 22
-
--- Value Instance Caching
+-- Value instances
 local Value = {
 	Clutch = values.Clutch,
 	Gear = values.Gear,
@@ -95,7 +87,12 @@ local ABSTrackerFolder = values.ABSTracker
 local ESCTrackerFolder = values.ESCTracker
 local WheelSpeedsFolder = values.WheelSpeeds
 
--- Status Vars
+-- Connected variables
+local GlobalTemperature = workspace:GetAttribute("GlobalTemperature") or 22
+workspace:GetAttributeChangedSignal("GlobalTemperature"):Connect(function()
+	GlobalTemperature = workspace:GetAttribute("GlobalTemperature") or 22
+end)
+
 local _IsOn = _Tune.AutoStart and (_Tune.Engine or _Tune.Electric)
 local IsOnValue = script.Parent.IsOn
 IsOnValue.Value = _IsOn
@@ -108,13 +105,6 @@ local StartingValue = IsOnValue.Starting
 StartingValue.Value = _Starting
 StartingValue.Changed:Connect(function(value)
 	_Starting = value
-end)
-
-local _InControls = false
-local ControlsOpenValue = script.Parent.ControlsOpen
-ControlsOpenValue.Value = _InControls
-ControlsOpenValue.Changed:Connect(function(value)
-	_InControls = value
 end)
 
 local _AutoClutch = true
@@ -131,7 +121,7 @@ MouseSteerValue.Changed:Connect(function(value)
 	_MSteer = value
 end)
 
--- Status Vars
+-- Local variables
 local ParkingGearEnabled = _Tune.Ratios[1] == 0
 local ParkingGearOffset = ParkingGearEnabled and 1 or 0
 
@@ -161,10 +151,6 @@ local _Shifting = false
 local _StallTimer = 0
 local _spLimit = 0
 
-local readme = car["A-Chassis Tune"].README
-local engine = readme:FindFirstChild("CustomEngine") and require(readme:FindFirstChild("CustomEngine")) or nil
-local differential = readme:FindFirstChild("CustomDifferential") and require(readme:FindFirstChild("CustomDifferential")) or nil
-
 local _Boost = 0
 local _TBoost = 0
 local _SBoost = 0
@@ -190,8 +176,6 @@ local _TMode = _Tune.TransModes[1]
 local _RevLimiting = false
 local _RevCutTimer = 0
 
-local _SteerL = false
-local _SteerR = false
 local _PBrake = car["A-Chassis Tune"]["A-Chassis Interface"].Values.PBrake.Value
 
 local _TCSTracker = {}
@@ -225,8 +209,6 @@ local _Acceleration = Vector3.new()
 local _Velocity = Vector3.new()
 local _Center = CFrame.new()
 
-local _InitialAutoShiftVers = _Tune.AutoShiftVers
-
 local _FlipWait = os.clock()
 local _FlipActive = false
 
@@ -234,7 +216,7 @@ local weightBrick = car.Body["#Weight"] :: Part
 local driveSeat = car.DriveSeat :: VehicleSeat
 local flipAlignOrientation = driveSeat.Flip :: AlignOrientation
 
--- Initialize Client
+-- Wheels
 local FWheelCount = 0
 local RWheelCount = 0
 
@@ -331,10 +313,6 @@ end
 -- Shutdown
 driveSeat.ChildRemoved:Connect(function(child: Instance) 
 	if child.Name=="SeatWeld" and child:IsA("Weld") then
-		if _Tune.Mobile and LastInputWasMobile then
-			_Tune.AutoShiftVers = _InitialAutoShiftVers
-		end
-		
 		-- Remove Flip Force
 		flipAlignOrientation.Enabled = false
 		_FlipActive = false
@@ -369,310 +347,10 @@ driveSeat.ChildRemoved:Connect(function(child: Instance)
 			end
 		end
 
-		-- Reintroduce touch controls
-		if _Tune.Mobile then
-			GuiService.TouchControlsEnabled = true
-		end
-
 		-- Tell server to remove
 		car["A-Chassis Tune"].Shutdown:FireServer()
 	end
 end)
-
--- Controls
-local Controls = script.Parent:FindFirstChild("Controls") :: Folder
-if not Controls then
-	Controls = Instance.new("Folder")
-	Controls.Name = "Controls"
-	Controls.Parent = script.Parent
-end
-
-local _CTRL = _Tune.Controls
-for i, v in _CTRL do
-	local a = Instance.new("StringValue")
-	a.Name = i
-	a.Value = v.Name
-	a.Changed:Connect(function(value: string)
-		if i == "MouseThrottle" or i == "MouseBrake" then
-			if value == "MouseButton1" or value == "MouseButton2" then
-				_CTRL[i] = Enum.UserInputType[value]
-			else
-				_CTRL[i] = Enum.KeyCode[value]
-			end
-		else
-			_CTRL[i] = Enum.KeyCode[value]
-		end
-	end)
-	a.Parent = Controls
-end
-
--- Deadzone Adjust
-local _PPH = _Tune.Peripherals
-for i, v in _PPH do
-	local a = Instance.new("IntValue")
-	a.Name = i
-	a.Value = v
-	a.Changed:Connect(function(value: number) 
-		a.Value = math.min(100, math.max(0, value))
-		_PPH[i] = value
-	end)
-	a.Parent = Controls
-end
-
--- Input Handler
-local function DealWithInput(input: InputObject, gameProcessed: boolean)
-	if not ChatInputBarConfiguration.IsFocused and not UserInputService:GetFocusedTextBox() and not _InControls then
-		-- Shift Down [Manual Transmission]
-		if (input.KeyCode ==_CTRL["ContlrShiftDown"] or (_MSteer and input.KeyCode==_CTRL["MouseShiftDown"]) or ((not _MSteer) and input.KeyCode==_CTRL["ShiftDown"])) and ((_IsOn and ((_TMode=="Auto" and _CGear<=1) and _Tune.AutoShiftVers == "New") or _TMode=="Semi") or _TMode=="Manual") and input.UserInputState == Enum.UserInputState.Begin then
-			if not _ShiftDn then _ShiftDn = true end
-
-			-- Shift Up [Manual Transmission]
-		elseif (input.KeyCode ==_CTRL["ContlrShiftUp"] or (_MSteer and input.KeyCode==_CTRL["MouseShiftUp"]) or ((not _MSteer) and input.KeyCode==_CTRL["ShiftUp"])) and ((_IsOn and ((_TMode=="Auto" and _CGear<1) and _Tune.AutoShiftVers == "New") or _TMode=="Semi") or _TMode=="Manual") and input.UserInputState == Enum.UserInputState.Begin then
-			if not _ShiftUp then _ShiftUp = true end
-
-			-- Toggle Clutch
-		elseif (input.KeyCode ==_CTRL["ContlrClutch"] or (_MSteer and input.KeyCode==_CTRL["MouseClutch"]) or ((not _MSteer) and input.KeyCode==_CTRL["Clutch"])) and _TMode=="Manual" then
-			if input.UserInputState == Enum.UserInputState.Begin then
-				_ClPressing = true
-				_PlayerClutch = true
-			elseif input.UserInputState == Enum.UserInputState.End then
-				_ClPressing = false
-				_PlayerClutch = false
-			end
-
-			-- Toggle PBrake
-		elseif input.KeyCode ==_CTRL["ContlrPBrake"] or (_MSteer and input.KeyCode==_CTRL["MousePBrake"]) or ((not _MSteer) and input.KeyCode==_CTRL["PBrake"]) or ((not _MSteer) and input.KeyCode==_CTRL["PBrake2"]) then
-			if input.UserInputState == Enum.UserInputState.Begin then
-				_PBrake = not _PBrake
-			elseif input.UserInputState == Enum.UserInputState.End then
-				if _Velocity.Magnitude>5 then _PBrake = false end
-			end
-
-			-- Toggle Transmission Mode
-		elseif (input.KeyCode == _CTRL["ContlrToggleTMode"] or input.KeyCode==_CTRL["ToggleTransMode"]) and input.UserInputState == Enum.UserInputState.Begin then
-			local n=1
-			for i,v in _Tune.TransModes do
-				if v==_TMode then n=i break end
-			end
-			n=n+1
-			if n>#_Tune.TransModes then n=1 end
-			_TMode = _Tune.TransModes[n]
-
-			-- Throttle
-		elseif ((not _MSteer) and (input.KeyCode==_CTRL["Throttle"] or input.KeyCode == _CTRL["Throttle2"])) or ((((_CTRL["MouseThrottle"]==Enum.UserInputType.MouseButton1 or _CTRL["MouseThrottle"]==Enum.UserInputType.MouseButton2) and input.UserInputType == _CTRL["MouseThrottle"]) or input.KeyCode == _CTRL["MouseThrottle"])and _MSteer) then
-			if input.UserInputState == Enum.UserInputState.Begin then
-				_IThrot = 1
-			else
-				_IThrot = 0
-			end
-
-			-- Brake
-		elseif ((not _MSteer) and (input.KeyCode==_CTRL["Brake"] or input.KeyCode == _CTRL["Brake2"])) or ((((_CTRL["MouseBrake"]==Enum.UserInputType.MouseButton1 or _CTRL["MouseBrake"]==Enum.UserInputType.MouseButton2) and input.UserInputType == _CTRL["MouseBrake"]) or input.KeyCode == _CTRL["MouseBrake"])and _MSteer) then
-			if input.UserInputState == Enum.UserInputState.Begin then
-				_IBrake = 1
-			else
-				_IBrake = 0
-			end
-
-			-- Steer Left
-		elseif (not _MSteer) and (input.KeyCode==_CTRL["SteerLeft"] or input.KeyCode == _CTRL["SteerLeft2"]) then
-			if input.UserInputState == Enum.UserInputState.Begin then
-				_GSteerT = -1
-				_SteerL = true
-			else
-				if _SteerR then
-					_GSteerT = 1
-				else
-					_GSteerT = 0
-				end
-				_SteerL = false
-			end
-
-			-- Steer Right
-		elseif (not _MSteer) and (input.KeyCode==_CTRL["SteerRight"] or input.KeyCode == _CTRL["SteerRight2"]) then
-			if input.UserInputState == Enum.UserInputState.Begin then
-				_GSteerT = 1
-				_SteerR = true
-			else
-				if _SteerL then
-					_GSteerT = -1
-				else
-					_GSteerT = 0
-				end
-				_SteerR = false
-			end
-
-			-- Toggle Mouse Controls
-		elseif input.KeyCode ==_CTRL["ToggleMouseDrive"] then
-			if input.UserInputState == Enum.UserInputState.End then
-				MouseSteerValue.Value = not _MSteer
-				_IThrot = 0
-				_IBrake = 0
-				_GSteerT = 0
-			end
-
-			-- Toggle TCS and ESC
-		elseif _Tune.TCSEnabled and _IsOn and (input.KeyCode == _CTRL["ToggleTCS"] or input.KeyCode == _CTRL["ContlrToggleTCS"]) then
-			if input.UserInputState == Enum.UserInputState.End then 
-				if _Tune.ESCEnabled then
-					if _TCS and _ESC then
-						_ESC = false
-					elseif _TCS and not _ESC then
-						_TCS = false
-					elseif not _TCS and not _ESC then
-						_TCS = true
-						_ESC = true
-					end
-				else
-					_TCS = not _TCS
-				end
-			end
-
-			-- Toggle ABS
-		elseif _Tune.ABSEnabled and _IsOn and (input.KeyCode == _CTRL["ToggleABS"] or input.KeyCode == _CTRL["ContlrToggleABS"]) then
-			if input.UserInputState == Enum.UserInputState.End then _ABS = not _ABS end
-
-			-- Toggle CS
-		elseif _Tune.CSEnabled and _IsOn and (input.KeyCode == _CTRL["ToggleCS"] or input.KeyCode == _CTRL["ContlrToggleCS"]) then
-			if input.UserInputState == Enum.UserInputState.End then _CS = not _CS end
-
-		end
-
-		-- Variable Controls
-		if input.UserInputType and input.UserInputType.Name:find("Gamepad") then
-			-- Gamepad Steering
-			if input.KeyCode == _CTRL["ContlrSteer"] then
-				if input.Position.X >= 0 then
-					local cDZone = math.min(0.99, _Tune.Peripherals.ControlRDZone / 100)
-					if math.abs(input.Position.X) > cDZone then
-						_GSteerT = (input.Position.X - cDZone) / (1 - cDZone)
-					else
-						_GSteerT = 0
-					end
-				else
-					local cDZone = math.min(0.99, _Tune.Peripherals.ControlLDZone / 100)
-					if math.abs(input.Position.X) > cDZone then
-						_GSteerT = (input.Position.X + cDZone) / (1 - cDZone)
-					else
-						_GSteerT = 0
-					end
-				end
-				
-				-- Gamepad Throttle
-			elseif input.KeyCode == _CTRL["ContlrThrottle"] then
-				_IThrot = math.max(0,input.Position.Z)
-
-				-- Gamepad Brake
-			elseif input.KeyCode == _CTRL["ContlrBrake"] then
-				_IBrake = input.Position.Z
-			end
-		end
-	else
-		_IThrot = 0
-		_GSteerT = 0
-		_IBrake = 0
-	end
-end
-
-UserInputService.InputBegan:Connect(DealWithInput)
-UserInputService.InputChanged:Connect(DealWithInput)
-UserInputService.InputEnded:Connect(DealWithInput)
-VirtualInput.Event:Connect(DealWithInput)
-
-local function DealWithMobileInput()
-	local mobile = script.Parent.Mobile
-
-	mobile.Jump.InputBegan:Connect(function(input: InputObject)
-		if input.UserInputType ~= Enum.UserInputType.Touch then return end
-		player.Character:FindFirstChildWhichIsA("Humanoid").Jump = true
-	end)
-
-	mobile.ModeSwitch.MouseButton1Click:Connect(function()
-		MobileMode = MobileModes[(table.find(MobileModes, MobileMode) or 0) + 1]
-		if not MobileMode then
-			MobileMode = MobileModes[1]
-		end
-	end)
-
-	-- Tap
-	for _, button in mobile.Tap:GetChildren() do
-		if not button:IsA("ImageButton") then continue end
-		button.InputBegan:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.Touch then return end
-			button.ImageColor3 = Color3.fromRGB(178,178,178)
-			button.ImageLabel.ImageColor3 = Color3.new(0,0,0)
-			button.ImageLabel.ImageTransparency = .5
-			if button.Name == "Throttle" then
-				_IThrot = 1
-			elseif button.Name == "Brake" then
-				_IBrake = 1
-			elseif button.Name == "Left" then
-				_GSteerT = -1
-				_SteerL = true
-			elseif button.Name == "Right" then
-				_GSteerT = 1
-				_SteerR = true
-			end
-		end)
-		button.InputEnded:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.Touch then return end
-			button.ImageColor3 = Color3.new(0, 0, 0)
-			button.ImageLabel.ImageColor3 = Color3.new(1,1,1)
-			button.ImageLabel.ImageTransparency = .8
-			if button.Name == "Throttle" then
-				_IThrot = 0
-			elseif button.Name == "Brake" then
-				_IBrake = 0
-			elseif button.Name == "Left" then
-				if _SteerR then
-					_GSteerT = 1
-				else
-					_GSteerT = 0
-				end
-				_SteerL = false
-			elseif button.Name == "Right" then
-				if _SteerL then
-					_GSteerT = -1
-				else
-					_GSteerT = 0
-				end
-				_SteerR = false
-			end
-		end)
-	end
-
-	-- Tilt
-	for _, button in mobile.Tilt:GetChildren() do
-		if not button:IsA("TextButton") then continue end
-		button.InputBegan:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.Touch then return end
-			if button.Name == "Throttle" then
-				_IThrot = 1
-			elseif button.Name == "Brake" then
-				_IBrake = 1
-			end
-		end)
-		button.InputEnded:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.Touch then return end
-			if button.Name == "Throttle" then
-				_IThrot = 0
-			elseif button.Name == "Brake" then
-				_IBrake = 0
-			end
-		end)
-	end
-	if UserInputService.GyroscopeEnabled then
-		UserInputService.DeviceRotationChanged:Connect(function(rotation, cframe)
-			if MobileMode == "Tilt" then
-				_GSteerT = -math.clamp(rotation.Position.Z*2, -1, 1)
-			end
-		end)
-	end
-end
-
-if _Tune.Mobile then
-	DealWithMobileInput()
-end
 
 local function SampleCurve(curve: { { number } }, x: number): number
 	for i = 2, #curve do
@@ -711,15 +389,6 @@ end
 -- Steering
 local function Steering(dt: number)
 	local speed = _Velocity.Magnitude * (Units.Length_mm / 1000) * 3.6
-	
-	-- Mouse Steering
-	if _MSteer then
-		local width = math.max(1, mouse.ViewSizeX * _Tune.Peripherals.MSteerWidth / 200)
-		_GSteerT = (mouse.X - mouse.ViewSizeX / 2) / width
-		if math.abs(_GSteerT) < (_Tune.Peripherals.MSteerDZone / 100) then
-			_GSteerT = 0
-		end
-	end
 	
 	-- Steering Input
 	local input = math.clamp(_GSteerT, -1, 1)
@@ -767,10 +436,8 @@ local function Steering(dt: number)
 		local rearSpeed = speed / math.max(_Tune.RSteerSpeed, 0.001)
 		if _Tune.FWSteer == "Static" then
 			rearScale = -math.max(0, 1 - rearSpeed)
-
 		elseif _Tune.FWSteer == "Speed" then
 			rearScale = math.min(1, rearSpeed)
-
 		elseif _Tune.FWSteer == "Both" then
 			rearScale = math.clamp(rearSpeed - 1, -1, 1)
 		end
@@ -913,13 +580,8 @@ local function Engine(dt: number)
 	local _WheelRPM = _DriveWheelSpeed * _CurrentRatio * fFDr
 	
 	-- Pedal smoothing
-	if LastInputWasGamepad then
-		_InThrot = _IThrot
-		_InBrake = _IBrake
-	else
-		_InThrot = MoveToward(_InThrot, _IThrot, StepForTime(dt, _Tune.ThrotTime))
-		_InBrake = MoveToward(_InBrake, _IBrake, StepForTime(dt, _Tune.BrakeTime))
-	end
+	_InThrot = MoveToward(_InThrot, _IThrot, StepForTime(dt, _Tune.ThrotTime))
+	_InBrake = MoveToward(_InBrake, _IBrake, StepForTime(dt, _Tune.BrakeTime))
 	
 	-- CVT
 	if _Tune.ClutchType == "CVT" then
@@ -1070,7 +732,7 @@ local function Engine(dt: number)
 	
 	-- Torque calculations (Detomiks)
 	-- What you see here is mostly just ported over from Desmos.
-	if not engine or _Tune.CustomEngineCalculations == false then
+	if not EngineModule or _Tune.CustomEngineCalculations == false then
 		local x = _RPM/1000
 		local NTorque = 0
 		local ETorque = 0
@@ -1126,7 +788,7 @@ local function Engine(dt: number)
 		local TotalTorque = math.clamp(NTorque + ETorque + TTorque + STorque, minTorque, maxTorque)
 		_HP, _TQ = (TotalTorque*x)/5.252, TotalTorque
 	else
-		engine.run({
+		EngineModule.run({
 			-- Manually add environment variables here
 			_RPM = _RPM,
 			_GThrot = _GThrot,
@@ -1135,22 +797,22 @@ local function Engine(dt: number)
 
 		}, dt)
 		
-		_Boost = engine._Boost
-		_TBoost = engine._TBoost
-		_SBoost = engine._SBoost
+		_Boost = EngineModule._Boost
+		_TBoost = EngineModule._TBoost
+		_SBoost = EngineModule._SBoost
 		
-		_HP = engine._HP
-		_TQ = engine._TQ
-		_NH = engine._NH
-		_NT = engine._NT
-		_EH = engine._EH
-		_ET = engine._ET
-		_TH = engine._TH
-		_TT = engine._TT
-		_SH = engine._SH
-		_ST = engine._ST
-		_BH = engine._BH
-		_BT = engine._BT
+		_HP = EngineModule._HP
+		_TQ = EngineModule._TQ
+		_NH = EngineModule._NH
+		_NT = EngineModule._NT
+		_EH = EngineModule._EH
+		_ET = EngineModule._ET
+		_TH = EngineModule._TH
+		_TT = EngineModule._TT
+		_SH = EngineModule._SH
+		_ST = EngineModule._ST
+		_BH = EngineModule._BH
+		_BT = EngineModule._BT
 	end
 	
 	-- Starter
@@ -1228,8 +890,8 @@ local function Engine(dt: number)
 				output.Torque = math.ceil(math.max(0, math.min(2, 1 - (((power / 100) * avg * output.Power) + ((coast / 100) * avg * (1 - output.Power))))) * 100) / 100
 			end
 			
-			if differential and _Tune.CustomDifferentialCalculations ~= false then
-				output = differential.run({
+			if DifferentialModule and _Tune.CustomDifferentialCalculations ~= false then
+				output = DifferentialModule.run({
 					_GThrot = output.Power,
 					_GBrake = output.Brake,
 					_GSteerC = _GSteerC,
@@ -1315,41 +977,41 @@ local function WheelOutput(dt: number)
 	local rot = 0
 	local count = 0
 	local driveCount = 0
-
+	
 	_TCSAmt = 0
 	_ABSAmt = 0
 	_ESCAmt = 0
-
+	
 	_MaxWheelSpin = 0
 	_DriveWheelSpeed = 0
-
+	
 	for wheel, data in Wheels do
 		count += 1
-
+		
 		-- Wheel speeds
 		if not _WheelSpeedsTable[data.Name] then
 			_WheelSpeedsTable[data.Name] = {}
 		end
-
+		
 		data.RotVelocityMagnitude = wheel.RotVelocity.Magnitude
 		data.WheelVelocityMagnitude = wheel.Velocity.Magnitude
-
+		
 		table.insert(_WheelSpeedsTable[data.Name], data.RotVelocityMagnitude)
 		if #_WheelSpeedsTable[data.Name] > 8 then
 			table.remove(_WheelSpeedsTable[data.Name], 1)
 		end
-
+		
 		local avg = 0
 		local avgCount = 0
-
+		
 		for _, a in _WheelSpeedsTable[data.Name] do
 			avg += a
 			avgCount += 1
 		end
-
+		
 		avg = avg / avgCount
 		_WheelSpeeds[data.Name] = avg
-
+		
 		if data.driven then
 			_DriveWheelSpeed = _DriveWheelSpeed + avg
 			driveCount = driveCount + 1
@@ -1357,25 +1019,25 @@ local function WheelOutput(dt: number)
 				_MaxWheelSpin = avg
 			end
 		end
-
+		
 		-- Output wheel speeds
 		data.WheelSpeedValue.Value = _WheelSpeeds[data.Name] -- I'm not using the avg variable here for future-proofing if we change the calculation later and stuff
 		rot += _WheelSpeeds[data.Name] * (data.Size.Y / 2)
-
+		
 		-- TCS
 		if _TCSTracker[data.Name] then
 			data.TCSTrackerValue.Value = _TCSTracker[data.Name]
 			_TCSAmt += _TCSTracker[data.Name]
 			tcsCount += 1
 		end
-
+		
 		-- ABS
 		if _ABSTracker[data.Name] then
 			data.ABSTrackerValue.Value = _ABSTracker[data.Name]
 			_ABSAmt += _ABSTracker[data.Name]
 			absCount += 1
 		end
-
+		
 		-- ESC
 		if _ESCTracker[data.Name] then
 			data.ESCTrackerValue.Value = _ESCTracker[data.Name]
@@ -1383,9 +1045,9 @@ local function WheelOutput(dt: number)
 			escCount += 1
 		end
 	end
-
+	
 	_DriveWheelSpeed = _DriveWheelSpeed / driveCount
-
+	
 	-- Wheel speeds
 	_AvgWheelSpeed = rot / count
 	-- TCS
@@ -1399,37 +1061,13 @@ local function WheelOutput(dt: number)
 	_ESCActive = false
 end
 
--- Mobile
-local function Mobile()
-	MobileUI.ModeSwitch.Visible = _Velocity.Magnitude < 5
-	MobileUI.ModeSwitch.Text = MobileMode
-	MobileUI.Jump.Visible = MobileUI.ModeSwitch.Visible
-	for _, v in MobileUIChildren do
-		if v:IsA("Frame") then
-			v.Visible = MobileMode == v.Name
-		end
-	end
-end
-
 -- Flip
 local function Flip()
-	local isUpright = weightBrick.CFrame.UpVector.Y > 0.1
-	if isUpright then
-		_FlipWait = os.clock()
-		return
-	end
-	
 	if _FlipActive then
 		return
 	end
 	
-	if os.clock() - _FlipWait < 3 then
-		return
-	end
-	
 	_FlipActive = true
-	_FlipWait = os.clock()
-	
 	flipAlignOrientation.Enabled = true
 	
 	task.delay(0.5, function()
@@ -1440,22 +1078,172 @@ local function Flip()
 	end)
 end
 
--- Last Input Type
-local function onLastInputTypeChanged(inputType: Enum.UserInputType)
-	LastInputWasGamepad = string.find(inputType.Name, "Gamepad") and true or false
+local function AutoFlip()
+	if weightBrick.CFrame.UpVector.Y > 0.1 then
+		_FlipWait = os.clock()
+		return
+	end
+	
+	if _FlipActive or os.clock() - _FlipWait < 3 then
+		return
+	end
+	
+	_FlipWait = os.clock()
+	Flip()
+end
 
-	-- Mobile
-	LastInputWasMobile = inputType == Enum.UserInputType.Touch
-	MobileUI.Visible = LastInputWasMobile
-	if LastInputWasMobile then
-		_Tune.AutoShiftVers = "Old"
-		_TMode = "Auto"
-	else
-		_Tune.AutoShiftVers = _InitialAutoShiftVers
+-- Inputs
+local VehicleActions = {
+	MoveAction = {
+		Step = function(action: InputAction)
+			local move = action:GetState() :: Vector2
+			
+			if not _MSteer then
+				_GSteerT = math.clamp(move.X, -1, 1)
+			end
+			
+			_IThrot = math.clamp(move.Y, 0, 1)
+			_IBrake = math.clamp(-move.Y, 0, 1)
+		end,
+	},
+	
+	ViewportAction = { -- Used to get mouse position on viewport for mouse steering
+		Step = function(action: InputAction)
+			if not _MSteer then
+				return
+			end
+			
+			local position = action:GetState() :: Vector2
+			local viewportSize = camera.ViewportSize
+			local width = math.max(1, viewportSize.X * _Tune.Peripherals.MSteerWidth / 200)
+			local steer = (position.X - viewportSize.X / 2) / width
+			
+			if math.abs(steer) < (_Tune.Peripherals.MSteerDZone / 100) then
+				steer = 0
+			end
+			
+			_GSteerT = math.clamp(steer, -1, 1)
+		end,
+	},
+	
+	MouseSteerAction = {
+		Pressed = function()
+			MouseSteerValue.Value = not _MSteer
+			_GSteerT = 0
+		end,
+	},
+	
+	ShiftDownAction = {
+		Pressed = function()
+			if ((_IsOn and ((_TMode == "Auto" and _CGear <= 1) and _Tune.AutoShiftVers == "New") or _TMode == "Semi") or _TMode == "Manual") then
+				_ShiftDn = true
+			end
+		end,
+	},
+	
+	ShiftUpAction = {
+		Pressed = function()
+			if ((_IsOn and ((_TMode == "Auto" and _CGear < 1) and _Tune.AutoShiftVers == "New") or _TMode == "Semi") or _TMode == "Manual") then
+				_ShiftUp = true
+			end
+		end,
+	},
+	
+	ClutchAction = {
+		Pressed = function()
+			if _TMode == "Manual" then
+				_ClPressing = true
+				_PlayerClutch = true
+			end
+		end,
+		
+		Released = function()
+			_ClPressing = false
+			_PlayerClutch = false
+		end,
+	},
+	
+	HandbrakeAction = {
+		Pressed = function()
+			_PBrake = not _PBrake
+		end,
+		
+		Released = function()
+			if _Velocity.Magnitude > 5 then
+				_PBrake = false
+			end
+		end,
+	},
+	
+	TransmissionAction = {
+		Pressed = function()
+			local index = table.find(_Tune.TransModes, _TMode) or 1
+			_TMode = _Tune.TransModes[index % #_Tune.TransModes + 1]
+		end,
+	},
+	
+	FlipAction = {
+		Pressed = Flip,
+	},
+	
+	ABSAction = {
+		Pressed = function()
+			if _Tune.ABSEnabled and _IsOn then
+				_ABS = not _ABS
+			end
+		end,
+	},
+	
+	ESCAction = {
+		Pressed = function()
+			if not (_Tune.TCSEnabled and _IsOn) then
+				return
+			end
+			
+			if not _Tune.ESCEnabled then
+				_TCS = not _TCS
+				return
+			end
+			
+			if _TCS and _ESC then
+				_ESC = false
+			elseif _TCS then
+				_TCS = false
+			else
+				_TCS = true
+				_ESC = true
+			end
+		end,
+	},
+	
+	CSAction = {
+		Pressed = function()
+			if _Tune.CSEnabled and _IsOn then
+				_CS = not _CS
+			end
+		end,
+	},
+}
+
+for actionName, handlers in VehicleActions do
+	local action = VehicleContext:FindFirstChild(actionName) :: InputAction
+	if not action then
+		continue
+	end
+	
+	if handlers.Pressed then
+		action.Pressed:Connect(handlers.Pressed)
+	end
+	
+	if handlers.Released then
+		action.Released:Connect(handlers.Released)
 	end
 end
 
 -- Run
+-- Print Version
+print("A-Chassis, Version " .. require(ReadMe))
+
 -- In case of car death
 driveSeat.AncestryChanged:Connect(function() 
 	if driveSeat.Parent then return end 
@@ -1463,22 +1251,19 @@ driveSeat.AncestryChanged:Connect(function()
 	script.Parent:Destroy() 
 end)
 
--- Changes
-onLastInputTypeChanged(UserInputService:GetLastInputType())
-UserInputService.LastInputTypeChanged:Connect(onLastInputTypeChanged)
-
--- Print Version
-print("A-Chassis, Version " .. require(readme))
-
 -- Runtime Loops
-local function RuntimeLoop(dt: number)
+local function RuntimeLoop(deltaTime: number)
 	-- Update Internal Values
 	-- Velocity
 	_Velocity = weightBrick.AssemblyLinearVelocity
-	_Acceleration = (_Velocity - _OldVelocity) / dt
+	_Acceleration = (_Velocity - _OldVelocity) / deltaTime
 	_OldVelocity = _Velocity
 	_Center = GetCenter()
-
+	
+	-- Inputs
+	VehicleActions.MoveAction.Step(MoveAction)
+	VehicleActions.ViewportAction.Step(ViewportAction)
+	
 	-- Update External Values
 	-- Transmission
 	Value.Clutch.Value = _Clutch
@@ -1486,12 +1271,12 @@ local function RuntimeLoop(dt: number)
 	Value.TransmissionMode.Value = _TMode
 	Value.CurrentRatio.Value = _CurrentRatio
 	Value.RPM.Value = _RPM
-
+	
 	-- Boost
 	Value.Boost.Value = _TBoost + _SBoost
 	Value.BoostTurbo.Value = _TBoost
 	Value.BoostSuper.Value = _SBoost
-
+	
 	-- Horsepower
 	Value.HpNatural.Value = _NH
 	Value.HpElectric.Value = _EH
@@ -1499,7 +1284,7 @@ local function RuntimeLoop(dt: number)
 	Value.HpSuper.Value = _SH
 	Value.HpBoosted.Value = _BH
 	Value.Horsepower.Value = _HP
-
+	
 	-- Torque
 	Value.TqNatural.Value = _NT
 	Value.TqElectric.Value = _ET
@@ -1507,7 +1292,7 @@ local function RuntimeLoop(dt: number)
 	Value.TqSuper.Value = _ST
 	Value.TqBoosted.Value = _BT
 	Value.Torque.Value = _TQ
-
+	
 	-- Inputs
 	Value.Throttle.Value = _GThrot
 	Value.InputThrottle.Value = _IThrot
@@ -1516,76 +1301,58 @@ local function RuntimeLoop(dt: number)
 	Value.SteerC.Value = _GSteerC
 	Value.SteerT.Value = _GSteerT
 	Value.PBrake.Value = _PBrake
-
+	
 	-- Velocity
 	Value.Velocity.Value = _Velocity
 	Value.AverageRotSpeed.Value = _AvgWheelSpeed
 	Value.Acceleration.Value = _Acceleration
-
+	
 	-- Misc
 	Value.Center.Value = _Center
 	Value.TCS.Value = _TCS
 	Value.TCSActive.Value = _TCSActive
 	Value.TCSAmt.Value = _TCSAmt
-
+	
 	Value.ABS.Value = _ABS
 	Value.ABSActive.Value = _ABSActive
 	Value.ABSAmt.Value = _ABSAmt
-
+	
 	Value.ESC.Value = _ESC
 	Value.ESCActive.Value = _ESCActive
 	Value.ESCAmt.Value = _ESCAmt
-
+	
 	Value.CS.Value = _CS
 	Value.CSActive.Value = _CSActive
 	Value.CSAmt.Value = _CSAmt
-
+	
 	-- Wheel Output
-	WheelOutput(dt)
+	WheelOutput(deltaTime)
 	
 	-- Steering
-	Steering(dt)
-
+	Steering(deltaTime)
+	
 	-- Gear
 	Gear()
-
+	
 	-- Power
-	Engine(dt)
+	Engine(deltaTime)
 end
 
-local fixedDeltaTime = 1/60 -- Fixed to avoid rewriting old code causing different behaviours at different FPS
-local accumulatedSimTime = 0
-
-RunService.PreSimulation:Connect(function(deltaTimeSim: number) 
-	accumulatedSimTime += deltaTimeSim
-	while accumulatedSimTime >= fixedDeltaTime do
-		accumulatedSimTime -= fixedDeltaTime
-		RuntimeLoop(fixedDeltaTime) 
-	end
-end)
+RunService:BindToSimulation(RuntimeLoop, Enum.StepFrequency.Hz60)
 
 local function SlowRuntimeLoop()
 	while true do
 		local deltaTime = task.wait(1/8)
-
-		-- Mobile UI
-		if _Tune.Mobile and LastInputWasMobile then
-			Mobile()
-		end
-
+		
 		-- Automatic Transmission
 		if _TMode == "Auto" then 
 			Auto() 
 		end
-
+		
 		-- Flip
 		if _Tune.AutoFlip then 
-			Flip() 
+			AutoFlip() 
 		end
-
-		-- Set GlobalTemperature
-		GlobalTemperature = workspace:GetAttribute("GlobalTemperature") or 22
-
 	end
 end
 
