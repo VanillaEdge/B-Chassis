@@ -1115,11 +1115,16 @@ local VehicleActions = {
 			
 			local position = action:GetState() :: Vector2
 			local viewportSize = camera.ViewportSize
-			local width = math.max(1, viewportSize.X * _Tune.Peripherals.MSteerWidth / 200)
-			local steer = (position.X - viewportSize.X / 2) / width
 			
-			if math.abs(steer) < (_Tune.Peripherals.MSteerDZone / 100) then
-				steer = 0
+			local halfWidth = viewportSize.X / 2
+			local limitPercent = math.clamp(_Tune.MouseSteerLimit, 1, 100)
+			local limit = halfWidth * limitPercent / 100
+			local deadzone = halfWidth * math.clamp(_Tune.MouseSteerDeadzone, 0, limitPercent - 1) / 100
+			local offset = position.X - halfWidth
+			
+			local steer = 0
+			if math.abs(offset) > deadzone then
+				steer = math.sign(offset) * (math.abs(offset) - deadzone) / (limit - deadzone)
 			end
 			
 			_GSteerT = math.clamp(steer, -1, 1)
