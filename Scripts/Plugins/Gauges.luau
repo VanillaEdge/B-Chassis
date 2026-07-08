@@ -48,8 +48,10 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
-local VirtualInput: BindableEvent = script.Parent.Parent.Drive.VirtualInput
-local Controls = script.Parent.Parent:WaitForChild("Controls")
+--local VirtualInput: BindableEvent = script.Parent.Parent.Drive.VirtualInput
+--local Controls = script.Parent.Parent:WaitForChild("Controls")
+
+local VehicleContext = script.Parent.Parent.VehicleContext :: InputContext
 
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if not gameProcessedEvent then
@@ -166,7 +168,7 @@ if autoscaling then
 	end
 	Drive = nil
 	for i,v in pairs(UNITS) do
-		v.maxSpeed = math.ceil(v.scaling*(_Tune.SpeedLimit > 0 and _Tune.SpeedLimit/((Units.Length_mm/1000)*3.6) or wDia*math.pi*_Tune.Redline/60/(_Tune.ClutchType == "CVT" and _Tune.CVTMinRatio or _Tune.Ratios[#_Tune.Ratios])/_Tune.FinalDrive/_Tune.FDMult))
+		v.maxSpeed = math.ceil(v.scaling*(_Tune.SpeedLimit > 0 and _Tune.SpeedLimit/((Units.Length_mm/1000)*3.6) or wDia*math.pi*_Tune.Redline/60/(_Tune.ClutchType == "CVT" and _Tune.CVTMinRatio or _Tune.Ratios[#_Tune.Ratios])/_Tune.FinalDrive))
 		v.spInc = math.max(math.ceil(v.maxSpeed/100)*10,10)
 	end
 end
@@ -287,33 +289,60 @@ if not (_Tune.ESCEnabled and _Tune.TCSEnabled) then
 	gauges.PBrake.Position = gauges.ESC.Position
 end
 
--- VirtalInput button toggles
+-- Input button toggles
 gauges.ABS.Button.MouseButton1Click:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleABS.Value], UserInputState = Enum.UserInputState.End}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleABS.Value], UserInputState = Enum.UserInputState.End}	
+	local binding = VehicleContext.ABSAction.ScriptableBinding
+	binding:Fire(true)
+	task.defer(function()
+		binding:Fire(false)
+	end)
 end)
 
 gauges.CS.Button.MouseButton1Click:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleCS.Value], UserInputState = Enum.UserInputState.End}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleCS.Value], UserInputState = Enum.UserInputState.End}
+	local binding = VehicleContext.CSAction.ScriptableBinding
+	binding:Fire(true)
+	task.defer(function()
+		binding:Fire(false)
+	end)
 end)
 
 gauges.ESC.Button.MouseButton1Click:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleTCS.Value], UserInputState = Enum.UserInputState.End}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleTCS.Value], UserInputState = Enum.UserInputState.End}
+	local binding = VehicleContext.ESCAction.ScriptableBinding
+	binding:Fire(true)
+	task.defer(function()
+		binding:Fire(false)
+	end)
 end)
 
 gauges.TCS.Button.MouseButton1Click:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleTCS.Value], UserInputState = Enum.UserInputState.End}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleTCS.Value], UserInputState = Enum.UserInputState.End}
+	local binding = VehicleContext.ESCAction.ScriptableBinding
+	binding:Fire(true)
+	task.defer(function()
+		binding:Fire(false)
+	end)
 end)
 
 gauges.PBrake.Button.MouseButton1Down:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.PBrake.Value], UserInputState = Enum.UserInputState.Begin}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.PBrake.Value], UserInputState = Enum.UserInputState.Begin}
+	VehicleContext.HandbrakeAction.ScriptableBinding:Fire(true)
 end)
 
 gauges.PBrake.Button.MouseButton1Up:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.PBrake.Value], UserInputState = Enum.UserInputState.End}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.PBrake.Value], UserInputState = Enum.UserInputState.End}
+	VehicleContext.HandbrakeAction.ScriptableBinding:Fire(false)
 end)
 
 TModeTextLabel.Button.MouseButton1Click:Connect(function()
-	VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleTransMode.Value], UserInputState = Enum.UserInputState.Begin}
+	--VirtualInput:Fire{KeyCode = Enum.KeyCode[Controls.ToggleTransMode.Value], UserInputState = Enum.UserInputState.Begin}
+	local binding = VehicleContext.TransmissionAction.ScriptableBinding
+	binding:Fire(true)
+	task.defer(function()
+		binding:Fire(false)
+	end)
 end)
 
 -- Warnings
@@ -558,6 +587,8 @@ local function RuntimeLoop()
 	if starting then
 		RedlineLight.BackgroundColor3 = Color3.new(1, 0, 0)
 	end
-end
 
+end
 RunService.Heartbeat:Connect(RuntimeLoop)
+
+-- Set ui for animations
