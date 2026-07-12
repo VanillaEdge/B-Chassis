@@ -13,9 +13,8 @@ local Tune = {}
 
 --[[Misc]]
 	Tune.LoadDelay		= 3			    -- Delay before initializing chassis (in seconds)
-	Tune.AutoStart		= false		    -- Set to false if using manual ignition plugin
+	Tune.AutoStart		= true		    -- Set to false if using manual ignition plugin
 	Tune.AutoFlip		= true		    -- Set to false if using manual flip plugin
-	Tune.Mobile			= true			-- Set to false if using a 3rd party mobile support method.
 
 --[[Controls]]
 	Tune.CustomInputContextEnabled = false	-- Enables a custom InputContext for vehicle controls
@@ -88,7 +87,7 @@ local Tune = {}
 	Tune.SteerDeadzone = 0.05	-- Minimum raw input threshold to filter out stick drift
 	
 	-- Steering Input
-	Tune.SteerInputCurve = {	-- [Raw Input : Steering Multiplier]
+	Tune.SteerInputCurve = {	-- [ Input Amount (0-1) : Input Amount Applied (0-1) ]
 		{0.0, 0.0},
 		{0.2, 0.05},
 		{0.5, 0.3},
@@ -96,7 +95,7 @@ local Tune = {}
 	}
 	
 	-- Speed Scaling
-	Tune.MaxAngleCurve = {    -- [Speed KMH : Steering Angle Multiplier]
+	Tune.MaxAngleCurve = {		-- [ Speed (KMH) : Steering Angle Multiplier (0-1) ]
 		{0, 1.0},
 		{100, 0.8},
 		{200, 0.5},
@@ -209,7 +208,7 @@ local Tune = {}
 	
 --[[Drivetrain]]	
 	Tune.Config			= "AWD"		-- "FWD" , "RWD" , "AWD"
-	Tune.TorqueVector	= 0.2		-- AWD ONLY, "-1" has a 100% front bias, "0" has a 50:50 bias, and "1" has a 100% rear bias. Can be any number between that range.
+	Tune.TorqueVector	= 0.35		-- AWD ONLY, "-1" has a 100% front bias, "0" has a 50:50 bias, and "1" has a 100% rear bias. Can be any number between that range.
 	
 	Tune.CustomDifferentialCalculations = false 	-- Enables the use of the CustomDifferential module.
 	
@@ -217,10 +216,10 @@ local Tune = {}
 	-- *You can set all of these values to 0 to achieve an open differential.
 	Tune.FDiffPower		= 20		-- 0 - 100				Higher values yield more wheel lock-up under throttle, more stability (Front wheels, only if driven)
 	Tune.FDiffCoast		= 60		-- 0 - 100				Higher values yield more wheel lock-up when off throttle, more stability (Front wheels, only if driven)
-	Tune.FDiffPreload	= 40		-- 0 - 10				Higher values will make the wheels generally lock up faster in any environment (Front wheels, only if driven)
+	Tune.FDiffPreload	= 8			-- 0 - 10				Higher values will make the wheels generally lock up faster in any environment (Front wheels, only if driven)
 	Tune.RDiffPower		= 20		-- 0 - 100				(Rear wheels, only if driven)
 	Tune.RDiffCoast		= 60		-- 0 - 100				(Rear wheels, only if driven)
-	Tune.RDiffPreload	= 40		-- 0 - 10				(Rear wheels, only if driven)
+	Tune.RDiffPreload	= 8			-- 0 - 10				(Rear wheels, only if driven)
 	
 	-- Traction Control Settings
 	Tune.TCSEnabled		= true		-- Implements TCS
@@ -229,12 +228,10 @@ local Tune = {}
 	Tune.TCSLimit		= 4			-- Minimum amount of torque at max reduction (in percent)
 	
 	-- Electronic Stability Control Settings
-	Tune.ESCEnabled		= true		-- Implements ESC. TCS MUST ALSO BE ENABLED. This uses the same keybind as TCS.
-	Tune.ESCVector		= -0.2		-- Force from the front to the rear for ESC. "-1" has a 100% front bias, "0" has a 50:50 bias, and "1" has a 100% rear bias. Can be any number between that range.
-	Tune.ESCThreshold	= 0.85		-- Force difference in Gs before ESC starts working.
-	Tune.ESCSpeed		= 30		-- Minimum speed before ESC can work in km/h.
-	Tune.ESCThrottle	= 60		-- Maximum amount of throttle allowed to ESC in percent. (0 to allow no throttle)
-	Tune.ESCBrake		= 60		-- Maximum amount of brakes allowed to ESC in percent. (0 to allow no brakes)
+	Tune.ESCEnabled		= true		-- Enables or disables electronic stability control. TCS must also be enabled
+	Tune.ESCThreshold	= 0.18		-- Difference between desired and actual yaw rate before ESC starts working (in rad/s)
+	Tune.ESCSpeed		= 30		-- Minimum vehicle speed before ESC can activate (in km/h)
+	Tune.ESCBrake		= 60		-- Maximum brake input ESC can apply to an individual wheel (in percent)
 	
 --[[Transmission]]
 	Tune.Clutch			= true		-- Implements a realistic clutch, change to "false" for the chassis to act like AC6.81T.
