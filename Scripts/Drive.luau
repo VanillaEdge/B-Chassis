@@ -19,21 +19,19 @@ local player = Players.LocalPlayer :: Player
 local car = script.Parent.Car.Value
 local values = script.Parent.Values
 
-local _Tune = require(car["A-Chassis Tune"])
-local Units = require(car["A-Chassis Tune"].README.Units)
+local _Tune = require(car["A-Chassis Tune"]) :: { [string]: any }
+local Units = require(car["A-Chassis Tune"].README.Units) :: { [string]: number }
 local InterfaceValues = car["A-Chassis Tune"]["A-Chassis Interface"].Values
 
 local VehicleContext = ((_Tune.CustomInputContextEnabled and _Tune.CustomInputContexPath) or script.Parent.VehicleContext) :: InputContext
-local MoveAction = VehicleContext.MoveAction :: InputAction
+local ThrottleAction = VehicleContext.ThrottleAction :: InputAction
+local BrakeAction = VehicleContext.BrakeAction :: InputAction
+local SteerAction = VehicleContext.SteerAction :: InputAction
 local ViewportAction = VehicleContext.ViewportAction :: InputAction
 
 local ReadMe = car["A-Chassis Tune"].README
 local EngineModule = ReadMe:FindFirstChild("CustomEngine") and require(ReadMe:FindFirstChild("CustomEngine")) or nil
 local DifferentialModule = ReadMe:FindFirstChild("CustomDifferential") and require(ReadMe:FindFirstChild("CustomDifferential")) or nil
-
-if _Tune.Mobile then
-	player.PlayerGui.ScreenOrientation = Enum.ScreenOrientation.LandscapeSensor
-end
 
 -- Value instances
 local Value = {
@@ -208,6 +206,7 @@ local _OldVelocity = Vector3.new()
 local _Acceleration = Vector3.new()
 local _Velocity = Vector3.new()
 local _Center = CFrame.new()
+local _Wheelbase = 1
 
 local _FlipWait = os.clock()
 local _FlipActive = false
@@ -231,16 +230,15 @@ for _, v in car.Wheels:GetChildren() :: { BasePart } do
 	if not v:IsA("BasePart") or not (name == "FL" or name == "FR" or name == "F" or name == "RL" or name == "RR" or name == "R") then 
 		continue 
 	end
-
-	local size = v.Size
+	
+	local av = v:WaitForChild("#AV") :: HingeConstraint
+	local bv = v:WaitForChild("#BV") :: HingeConstraint
+	
 	local base = v:FindFirstChild("Base")
 	local arm = v:FindFirstChild("Arm")
 
 	local steer = arm and arm:FindFirstChild("Steer") or nil
 	local steerAttach0 = steer and steer.Attachment0 or nil
-
-	local av = v:FindFirstChild("#AV")
-	local bv = v:FindFirstChild("#BV")
 
 	FWheelCount += string.find(name, "F") and 1 or 0
 	RWheelCount += (not string.find(name, "F")) and 1 or 0
@@ -265,7 +263,7 @@ for _, v in car.Wheels:GetChildren() :: { BasePart } do
 	local data = {}
 	data.Name = name
 	data.OppositeWheel = (name == "FL" and car.Wheels:FindFirstChild("FR")) or (name == "FR" and car.Wheels:FindFirstChild("FL")) or (name == "RL" and car.Wheels:FindFirstChild("RR")) or (name == "RR" and car.Wheels:FindFirstChild("RL"))
-	data.Size = size
+	data.Size = v.Size
 	data.Base = base
 	data.Arm = arm
 	data.Steer = steer
@@ -377,13 +375,13 @@ local function MoveToward(current: number, target: number, step: number): number
 end
 
 local function StepForTime(dt: number, time: number, range: number ?): number
-	range = range or 1
+	local span = range or 1
 	
 	if time <= 0 then
-		return range
+		return span
 	end
 	
-	return range * dt / time
+	return span * dt / time
 end
 
 -- Steering
@@ -579,6 +577,8 @@ local function Engine(dt: number)
 	
 	local _WheelRPM = _DriveWheelSpeed * _CurrentRatio * fFDr
 	
+	local speedKmh = _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)
+	
 	-- Pedal smoothing
 	_InThrot = MoveToward(_InThrot, _IThrot, StepForTime(dt, _Tune.ThrotTime))
 	_InBrake = MoveToward(_InBrake, _IBrake, StepForTime(dt, _Tune.BrakeTime))
@@ -648,12 +648,11 @@ local function Engine(dt: number)
 	-- Speed limiter
 	local limit = (_CGear < 0 and _Tune.ReverseSpeed or _Tune.SpeedLimit)
 	if limit > 0 then
-		local speed = _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)
-		local cut = 1 - math.clamp((speed - (limit - _Tune.SLimitGradient)) / _Tune.SLimitGradient, 0, 1)
+		local cut = 1 - math.clamp((speedKmh - (limit - _Tune.SLimitGradient)) / _Tune.SLimitGradient, 0, 1)
 		_GThrot = math.min(_GThrot, cut)
 		
 		if _Tune.SLimitBrake then
-			_GBrake = math.max(_GBrake, math.clamp((speed - limit) / _Tune.SLimitGradient, 0, 1))
+			_GBrake = math.max(_GBrake, math.clamp((speedKmh - limit) / _Tune.SLimitGradient, 0, 1))
 		end
 	end
 	
@@ -689,15 +688,14 @@ local function Engine(dt: number)
 	
 	if _Tune.Clutch then
 		if _AutoClutch then
-			local vehicleSpeed = _Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)
 			if _Tune.ClutchType == "Clutch" or _Tune.ClutchType == "CVT" then
 				_ClutchKick = _ClPressing and 1 or MoveToward(_ClutchKick, 0, StepForTime(dt, _Tune.ClutchTime))				
 				
-				local speedInfluence = vehicleSpeed / math.max(_Tune.SpeedEngage, 0.001) -- / math.max(math.abs(_CGear), 1)
+				local speedInfluence = speedKmh / math.max(_Tune.SpeedEngage, 0.001) -- / math.max(math.abs(_CGear), 1)
 				_ClutchModulate = math.clamp(speedInfluence - _ClutchKick, 0, 1)
 				
 			elseif _Tune.ClutchType == "TorqueConverter" and _Tune.TQLock then
-				local offThrottleUnlock = _GThrot <= 0.01 and vehicleSpeed < _Tune.SpeedEngage
+				local offThrottleUnlock = _GThrot <= 0.01 and speedKmh < _Tune.SpeedEngage
 				local onThrottleUnlock = _GThrot > 0.01 and _RPM < _Tune.RPMEngage and _WheelRPM < _Tune.RPMEngage
 				
 				local targetModulate = (offThrottleUnlock or onThrottleUnlock) and 0 or 1
@@ -832,6 +830,39 @@ local function Engine(dt: number)
 	local PBrakeForceF = _Tune.PBrakeForce * 9.80665 * Units.Force_N * _Tune.PBrakeBias
 	local PBrakeForceR = _Tune.PBrakeForce * 9.80665 * Units.Force_N * (1 - _Tune.PBrakeBias)
 	
+	-- ESC
+	local escTargetWheel = nil
+	local escBrake = 0
+	
+	if _ESC and speedKmh > _Tune.ESCSpeed then
+		local speedMps = _Velocity.Magnitude * (Units.Length_mm / 1000)
+		local steerAngle = math.rad(_GSteerC * _Tune.MaxSteerAngle * SampleCurve(_Tune.MaxAngleCurve, speedKmh))
+		local desiredYaw = (speedMps / math.max(_Wheelbase, 0.001)) * math.tan(steerAngle)
+		local actualYaw = weightBrick.CFrame:VectorToObjectSpace(weightBrick.AssemblyAngularVelocity).Y
+		
+		local maxYaw = 9.80665 / math.max(speedMps, 0.001) -- 1 g limit
+		desiredYaw = math.clamp(desiredYaw, -maxYaw, maxYaw)
+		
+		local yawError = desiredYaw - actualYaw
+		local threshold = math.max(_Tune.ESCThreshold, 0.001)
+		
+		if math.abs(yawError) > threshold then
+			local desiredSign = math.sign(desiredYaw)
+			local turnSign = desiredSign ~= 0 and desiredSign or math.sign(actualYaw)
+			
+			if turnSign ~= 0 then
+				if desiredSign ~= 0 and math.sign(yawError) == desiredSign then
+					escTargetWheel = turnSign > 0 and "RL" or "RR" -- brake the inside rear wheel
+				else
+					escTargetWheel = turnSign > 0 and "FR" or "FL" -- brake the outside front wheel
+				end
+				
+				local response = math.clamp((math.abs(yawError) - threshold) / threshold, 0, 1)
+				escBrake = response * math.clamp(_Tune.ESCBrake / 100, 0, 1)
+			end
+		end
+	end
+	
 	-- Update Wheels
 	for wheel, data in Wheels do
 		-- Apply Power
@@ -845,30 +876,6 @@ local function Engine(dt: number)
 		if _ClPressing or (_AutoClutch and _Starting) then
 			clutch = 0
 		end
-		
-		-- Apply ESC
-		local tqESC = 0
-		if not (data.Name == "F" or data.Name == "R") and _ESC and (_Velocity.Magnitude / (Units.Velocity_mdivs / 3.6)) > _Tune.ESCSpeed then
-			local g = weightBrick.CFrame:VectorToObjectSpace(_Acceleration / (Units.Velocity_mdivs) / ((_Tune.GravComp > 0 and _Tune.GravComp or workspace.Gravity) * (Units.Length_mm / 1000)))
-			if math.sign(_GSteerC) ~= math.sign(g.X) then
-				local diff = _GSteerC - (g.X * -math.sign(_Center:VectorToObjectSpace(_Velocity).Z))
-				if math.abs(diff) > _Tune.ESCThreshold then
-					local escVector, escBias = 1, (_Tune.ESCVector + 1)
-					if data.isFront then
-						escVector = escVector * (2 - escBias)
-					else
-						escVector = escVector * escBias
-					end
-					
-					tqESC = ((data.Name == "FL" or data.Name == "RL") and 1 or -1) * math.sign(diff) * escVector
-					throt = throt + (math.max(tqESC, 0) - throt) * (_Tune.ESCThrottle / 100)
-					brake = brake + (-math.min(tqESC, 0) - brake) * (_Tune.ESCBrake / 100)
-				end
-			end
-		end
-		
-		_ESCActive = tqESC ~= 0 or _ESCActive
-		_ESCTracker[data.Name] = tqESC
 		
 		-- Apply Differential
 		local output = {
@@ -907,10 +914,21 @@ local function Engine(dt: number)
 			end
 		end
 		
+		-- Apply ESC
+		local tqESC = 0
+		if data.Name == escTargetWheel then
+			tqESC = math.min(escBrake, math.max(1 - output.Brake, 0))
+			output.Brake += tqESC
+		end
+		
+		_ESCActive = tqESC > 0 or _ESCActive
+		_ESCTracker[data.Name] = tqESC
+		
 		-- Apply ABS
 		local tqABS = 1
 		if _ABS and output.Brake > 0 then
 			tqABS = 1 - (math.min(math.max(0, math.abs(data.RotVelocityMagnitude * (data.Size.Y / 2) / (Units.Velocity_mdivs / 3.6) - data.WheelVelocityMagnitude / (Units.Velocity_mdivs / 3.6)) - _Tune.ABSThreshold) / _Tune.ABSGradient, 1) * (1 - (_Tune.ABSLimit / 100)))
+			output.Brake *= tqABS
 		end
 		
 		_ABSActive = tqABS < 1 or _ABSActive
@@ -920,6 +938,7 @@ local function Engine(dt: number)
 		local tqTCS = 1
 		if data.driven and _TCS and output.Power > 0.01 then
 			tqTCS = 1 - (math.min(math.max(0, math.abs(data.RotVelocityMagnitude * (data.Size.Y / 2) / (Units.Velocity_mdivs / 3.6) - data.WheelVelocityMagnitude / (Units.Velocity_mdivs / 3.6)) - _Tune.TCSThreshold) / _Tune.TCSGradient, 1) * (1 - (_Tune.TCSLimit / 100)))
+			-- This is used when calculating tqOUT
 		end
 		
 		if data.driven then
@@ -945,7 +964,7 @@ local function Engine(dt: number)
 		local pBrakeForce = data.isFront and PBrakeForceF or PBrakeForceR
 		local eBrakeForce = data.driven and (_Tune.EBrakeForce * clutch * ((1 - output.Power) * (_RPM / _Tune.Redline))) or 0
 		
-		data.BV.MotorMaxTorque = (brakeForce * output.Brake * tqABS) + eBrakeForce + (pBrakeForce * PBrakeV)
+		data.BV.MotorMaxTorque = (brakeForce * output.Brake) + eBrakeForce + (pBrakeForce * PBrakeV)
 	end
 end
 
@@ -955,6 +974,7 @@ local function GetCenter()
 	local centerR = Vector3.new()
 	local countF = 0
 	local countR = 0
+	
 	for wheel, data in Wheels do
 		if data.isFront then
 			centerF = centerF + wheel.Position
@@ -964,10 +984,13 @@ local function GetCenter()
 			countR = countR + 1
 		end
 	end
+	
 	centerF = centerF / countF
 	centerR = centerR / countR
-	local center = CFrame.lookAt(centerR:Lerp(centerF, 0.5), centerF)
-	return center
+	
+	_Wheelbase = math.max((centerF - centerR).Magnitude * (Units.Length_mm / 1000), 0.001)
+	
+	return CFrame.lookAt(centerR:Lerp(centerF, 0.5), centerF)
 end
 
 local function WheelOutput(dt: number)
@@ -1093,17 +1116,30 @@ local function AutoFlip()
 end
 
 -- Inputs
+-- If migrating to server authority, ensure to use attributes for inputs to allow prediction
 local VehicleActions = {
-	MoveAction = {
+	ThrottleAction = {
 		Step = function(action: InputAction)
-			local move = action:GetState() :: Vector2
-			
-			if not _MSteer then
-				_GSteerT = math.clamp(move.X, -1, 1)
+			local throttle = action:GetState() :: number
+			_IThrot = math.clamp(throttle, 0, 1)
+		end,
+	},
+	
+	BrakeAction = {
+		Step = function(action: InputAction)
+			local brake = action:GetState() :: number
+			_IBrake = math.clamp(brake, 0, 1)
+		end,
+	},
+	
+	SteerAction = {
+		Step = function(action: InputAction)
+			if _MSteer then
+				return
 			end
 			
-			_IThrot = math.clamp(move.Y, 0, 1)
-			_IBrake = math.clamp(-move.Y, 0, 1)
+			local steer = action:GetState() :: number
+			_GSteerT = math.clamp(steer, -1, 1)
 		end,
 	},
 	
@@ -1228,7 +1264,7 @@ local VehicleActions = {
 			end
 		end,
 	},
-}
+} :: { [string]: { [string]: (...any) -> (), }, }
 
 for actionName, handlers in VehicleActions do
 	local action = VehicleContext:FindFirstChild(actionName) :: InputAction
@@ -1266,7 +1302,9 @@ local function RuntimeLoop(deltaTime: number)
 	_Center = GetCenter()
 	
 	-- Inputs
-	VehicleActions.MoveAction.Step(MoveAction)
+	VehicleActions.ThrottleAction.Step(ThrottleAction)
+	VehicleActions.BrakeAction.Step(BrakeAction)
+	VehicleActions.SteerAction.Step(SteerAction)
 	VehicleActions.ViewportAction.Step(ViewportAction)
 	
 	-- Update External Values
