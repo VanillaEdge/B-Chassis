@@ -268,7 +268,7 @@ local function RuntimeLoop(dt)
 				end
 				soundData.Sound:SetAttribute("Played", true)
 				soundData.Sound.Volume = soundData.Volume
-				soundData.Sound.PlaybackSpeed = soundData.Pitch + (soundData.MaxPitch - soundData.Pitch) * (rpm/_Tune.IgnitionRPM)
+				soundData.Sound.PlaybackSpeed = soundData.Pitch + (soundData.MaxPitch - soundData.Pitch) * math.clamp(rpm / _Tune.IdleRPM, 0, 1)
 			else
 				soundData.Sound:SetAttribute("Played", false)
 				if soundData.Playing == true then

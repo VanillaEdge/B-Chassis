@@ -9,27 +9,46 @@
 	Version 1
 --]]
 
---[[START]]
 local Players = game:GetService("Players")
-script.Parent.Parent.DriveSeat.Disabled = true -- Prevents entering the car before initialization
 
-local _BuildVersion = require(script.Parent.README)
+local car = script.Parent.Parent
+local seat = car.DriveSeat
+seat.Disabled = true
 
---[[Weld functions]]
-local function MakeWeldConstraint(x, y)
-	local W = Instance.new("WeldConstraint")
-	W.Name = "Weld"
-	W.Part0 = x
-	W.Part1 = y
-	W.Parent = x
-	return W
+local plugins = script.Parent.Plugins
+local interface = script.Parent["A-Chassis Interface"]
+interface.Car.Value = car
+
+local shutdownEvent = Instance.new("UnreliableRemoteEvent", script.Parent)
+shutdownEvent.Name = "Shutdown"
+
+local Tune = require(script.Parent)
+local Units = require(car["A-Chassis Tune"].README.Units)
+
+local Wheels = {}
+for i, v in car.Wheels:GetChildren() do
+	local name = v.Name
+	if not v:IsA("BasePart") or not (name == "FL" or name == "FR" or name == "RL" or name == "RR") then 
+		continue 
+	end
+	
+	table.insert(Wheels, v)
+end
+
+local function MakeWeldConstraint(part0: BasePart, part1: BasePart): WeldConstraint
+	local weld = Instance.new("WeldConstraint")
+	weld.Name = "Weld"
+	weld.Part0 = part0
+	weld.Part1 = part1
+	weld.Parent = part0
+	return weld
 end
 
 local function ModelWeld(model: Instance, target: BasePart)
 	if model:IsA("BasePart") then 
 		MakeWeldConstraint(target, model) 
 	end
-
+	
 	for i, part in model:GetDescendants() do
 		if part:IsA("BasePart") then
 			MakeWeldConstraint(part, target)
@@ -37,34 +56,6 @@ local function ModelWeld(model: Instance, target: BasePart)
 	end
 end
 
---[[Initialize]]
-local car = script.Parent.Parent
-local seat = car.DriveSeat
-
-local Wheels = {}
-local Drive = Wheels
-local Tune = require(script.Parent)
-local Units = require(car["A-Chassis Tune"].README.Units)
-
-local shutdownEvent = Instance.new("UnreliableRemoteEvent", script.Parent)
-shutdownEvent.Name = "Shutdown"
-
-for _, v in car.Wheels:GetChildren() do
-	if (v.Name == "FL" or v.Name == "FR" or v.Name == "F" or v.Name == "RL" or v.Name == "RR" or v.Name == "R") and v:IsA("BasePart") then
-		table.insert(Wheels, v)
-	end
-end
-
-task.wait(Tune.LoadDelay)
-
---Remove Existing Mass
-for i, descendant in car:GetDescendants() do
-	if descendant:IsA("BasePart") then
-		descendant.Massless = true
-	end
-end
-
---[[Wheel Configuration]]
 local function GetCarCenter(dist: number ?): CFrame
 	dist = dist or 0.5
 	
@@ -74,10 +65,6 @@ local function GetCarCenter(dist: number ?): CFrame
 	local countR = 0
 	
 	for i, v in Wheels do
-		if not v:IsA("BasePart") then 
-			continue 
-		end
-		
 		if v.Name == "FL" or v.Name == "FR" or v.Name == "F" then
 			centerF += v.Position
 			countF += 1
@@ -94,16 +81,15 @@ local function GetCarCenter(dist: number ?): CFrame
 	return CFrame.lookAt(pos, pos + centerF - centerR)
 end
 
---PGS/Legacy
-task.wait() -- Add waits to help server speed as the car loads
-
-for _, v in Drive do
-	-- Remove non-parts
-	if not v:IsA("BasePart") then 
-		table.remove(Drive, table.find(Drive, v))
-		continue
+-- Remove Existing Mass
+for i, descendant in car:GetDescendants() do
+	if descendant:IsA("BasePart") then
+		descendant.Massless = true
 	end
+end
 
+-- Suspension
+for _, v in Wheels do
 	--Apply Wheel Density
 	local cpp = v.CurrentPhysicalProperties
 	local wdensity = 0
@@ -147,7 +133,7 @@ for _, v in Drive do
 		a[1].CFrame = v.CFrame*a[2]
 	end
 
-	--[[Chassis Assembly]]
+	--Chassis Assembly
 	--Create Steering Axle
 	local arm = Instance.new("Part")
 	arm.Name = "Arm"
@@ -230,7 +216,7 @@ for _, v in Drive do
 	
 	--Lock Rear Steering Axle
 	if (Tune.FWSteer=='Static' or Tune.FWSteer=='Speed' or Tune.FWSteer=='Both') == false then
-		if v.Name == "RL" or v.Name == "RR" or v.Name=="R" then
+		if v.Name == "RL" or v.Name == "RR" then
 			MakeWeldConstraint(base, axle)
 		end
 	end
@@ -333,7 +319,7 @@ for _, v in Drive do
 	end
 
 	-- Attempt to fix wheel alignment issues
-	if string.find(v.Name, "L") or v.Name=="R" or v.Name == "F" then
+	if string.find(v.Name, "L") then
 		AV.Attachment0.Orientation = Vector3.new(0, 180, 0)
 		BV.Attachment0.Orientation = Vector3.new(0, 180, 0)
 		AV.Attachment1.Orientation = Vector3.new(0, 180, 0)
@@ -352,24 +338,18 @@ for _, v in Drive do
 	end
 end
 
---[[Vehicle Weight]]	
-task.wait()
-
---Determine Current Mass
-local mass=0
-
-local function getMass(p)
-	for i, v in (p:GetDescendants())do
-		if v:IsA("BasePart") and not v.Massless then
-			mass=mass+v.Mass
+-- Weight
+do
+	local mass = 0
+	for i, descendant in car:GetDescendants() do
+		if descendant:IsA("BasePart") and not descendant.Massless then
+			mass += descendant.Mass
 		end
 	end	
-end
-getMass(car)
-
---Apply Vehicle Weight
-if mass * Units.Mass_kg < Tune.Weight * 0.453592 then
-	--Create Weight Brick
+	
+	local size = Vector3.new(Tune.WeightBSize[1], Tune.WeightBSize[2], Tune.WeightBSize[3]) / Units.Length_mm
+	local density = (Tune.Weight * Units.Mass_kg - mass) / (size.X * size.Y * size.Z) -- fixed by denkodin
+	
 	local weightB = Instance.new("Part")
 	weightB.Name = "#Weight"
 	weightB.Anchored = true
@@ -379,25 +359,10 @@ if mass * Units.Mass_kg < Tune.Weight * 0.453592 then
 	weightB.BottomSurface = Enum.SurfaceType.Smooth
 	weightB.Transparency = Tune.WBVisible and 0.75 or 1
 
-	weightB.Size = Vector3.new(Tune.WeightBSize[1], Tune.WeightBSize[2], Tune.WeightBSize[3]) / Units.Length_mm
-	local tdensity = (Tune.Weight * Units.Mass_kg - mass) / (weightB.Size.X * weightB.Size.Y * weightB.Size.Z) --fixed by denkodin
-	weightB.CustomPhysicalProperties = PhysicalProperties.new(math.clamp(tdensity, 0.01, 100), 0, 0, 0, 0)
+	weightB.Size = size
+	weightB.CustomPhysicalProperties = PhysicalProperties.new(math.clamp(density, 0.01, 100), 0, 0, 0, 0)
 	weightB.CFrame = GetCarCenter(Tune.WeightDist / 100) * CFrame.new(0, Tune.CGHeight, 0)
 	weightB.Parent = car.Body
-	
-	--Density Cap
-	if weightB.CustomPhysicalProperties.Density>=100 then
-		warn( "\n\t [A-Chassis ".._BuildVersion.."]: Density too high for specified volume."
-			.."\n\t Current Density:\t"..math.ceil(tdensity)
-			.."\n\t Max Density:\t"..math.ceil(weightB.CustomPhysicalProperties.Density)
-			.."\n\t Increase weight brick size to compensate.")
-	end
-else
-	--Existing Weight Is Too Massive
-	warn( "\n\t [A-Chassis ".._BuildVersion.."]: Mass too high for specified weight."
-		.."\n\t Target Mass:\t"..math.ceil(Tune.Weight*Units.Mass_kg)
-		.."\n\t Current Mass:\t"..math.ceil(mass)
-		.."\n\t Reduce part size or axle density to achieve desired weight.")
 end
 
 -- Gravcomp
@@ -406,11 +371,11 @@ for i, descendent in car:GetDescendants() do
 	if not valid then 
 		continue
 	end
-
+	
 	local attachment = descendent:FindFirstChild("#GRAVCOMP_ATTACH") or Instance.new("Attachment")
 	attachment.Name = "#GRAVCOMP_ATTACH"
 	attachment.Parent = descendent
-
+	
 	local force = descendent:FindFirstChild("#GRAVCOMP") or Instance.new("VectorForce")
 	force.Name = "#GRAVCOMP"
 	force.RelativeTo = Enum.ActuatorRelativeTo.World
@@ -441,95 +406,86 @@ do
 	alignOrientation.Parent = car.DriveSeat
 end
 
---[[Finalize Chassis]]	
---Misc Weld
-for i, v in script:GetChildren() do
-	if v:IsA("ModuleScript") then
-		require(v)
-	end
-end
-
---Weld Body
-ModelWeld(car.Body, car.DriveSeat)
-
---Unanchor
-for i, v in car:GetDescendants() do
-	if v:IsA("BasePart") then
-		v.Anchored = false
-	end
-end
-
---[[Manage Plugins]]
-task.wait()
-
-local plugins = script.Parent.Plugins
-local interface = script.Parent["A-Chassis Interface"]
-interface.Car.Value = car
-
-for i, v in plugins:GetChildren() do
-	for _, a in v:GetChildren() do
-		if a:IsA("BaseRemoteEvent") or a:IsA("RemoteFunction") then 
-			a.Parent = car
-			for _, b in (a:GetChildren()) do
-				if b:IsA("Script") then b.Enabled = true end
-			end	
+-- Weld and Unanchor
+do
+	-- Run MiscWeld Module(s)
+	for i, v in script:GetChildren() do
+		if v:IsA("ModuleScript") then
+			require(v)
 		end
 	end
-	v.Parent = interface
-end
-
-plugins:Destroy()
-
---[[Remove Character Weight]]
-
--- Get Seats
-local Seats = {}
-
-local function getSeats(group: Instance)
-	for _, descendant in group:GetDescendants() do
-		if descendant:IsA("VehicleSeat") or descendant:IsA("Seat") then
-			local cache = {}
-			cache.Seat = descendant		-- Seat Instance
-			cache.Parts = {}			-- Player Part Storage
-			table.insert(Seats, cache)
+	
+	-- Weld Body
+	ModelWeld(car.Body, car.DriveSeat)
+	
+	--Unanchor
+	for i, v in car:GetDescendants() do
+		if v:IsA("BasePart") then
+			v.Anchored = false
 		end
 	end	
 end
 
-getSeats(car)
-
--- Store Physical Properties/Remove Mass Function
-local function handleCharacter(character, tbl)
-	for _, v in character:GetDescendants() do
-		if v:IsA("BasePart") then
-			table.insert(tbl, {v, v.Massless})
-			v.Massless = true
+-- Plugins
+do
+	for i, v in plugins:GetChildren() do
+		-- Move remotes to car
+		for i, event in v:GetChildren() do
+			if not event:IsA("BaseRemoteEvent") and not event:IsA("RemoteFunction") then
+				continue
+			end
+			
+			event.Parent = car
+			
+			-- Enable scripts if any
+			for i, child in event:GetChildren() do
+				if child:IsA("Script") then 
+					child.Enabled = true 
+				end
+			end
 		end
+		
+		-- Move plugins to screen gui
+		v.Parent = interface
 	end
+	
+	-- Cleanup folder
+	plugins:Destroy()
 end
 
--- Apply Seat Handler
-for _, data in Seats do
-	local seatObject = data.Seat :: Seat
-	local parts = data.Parts
-
-	seatObject:GetPropertyChangedSignal("Occupant"):Connect(function()
-		local occupant = seatObject.Occupant and seatObject.Occupant.Parent
-		if occupant then
-			handleCharacter(occupant, parts)
-		else
-			for _, entry in parts do
-				entry[1].Massless = entry[2]
+-- Character mass
+for i, seat in car:GetDescendants() do
+	if not seat:IsA("Seat") and not seat:IsA("VehicleSeat") then
+		continue
+	end
+	
+	local parts = {}
+	
+	seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+		if not seat.Occupant then
+			for part, massless in parts do
+				part.Massless = massless
 			end
+			
 			table.clear(parts)
+			return
+		end
+		
+		for i, part in seat.Occupant.Parent:GetDescendants() do
+			if not part:IsA("BasePart") then
+				continue
+			end
+			
+			parts[part] = part.Massless
+			part.Massless = true
 		end
 	end)
 end
 
---[[Destroying Cleanup]]
+-- Void death cleanup
 seat.AncestryChanged:Connect(function()
 	if seat.Parent then 
-		return 
+		return
 	end
 	
 	task.wait(10) -- Delay for clients to finish up
@@ -539,8 +495,6 @@ seat.AncestryChanged:Connect(function()
 	end
 end)
 
---[[Driver Handling]]
-
 -- Driver Sit
 seat.ChildAdded:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
@@ -549,25 +503,27 @@ seat.ChildAdded:Connect(function(child: Instance)
 			return 
 		end
 		
+		task.wait(0.1)
+		
 		car.DriveSeat:SetNetworkOwner(player)
-
+		
 		local clone = interface:Clone()
 		clone.Parent = player.PlayerGui
 	end
 end)
 
---Driver Leave
+-- Driver Leave
 seat.ChildRemoved:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
-		if not seat.Parent then 
-			return 
+		if not seat.Parent then
+			return
 		end
-
+		
 		-- Remove Flip Force
 		if seat:FindFirstChild("Flip") then
 			seat.Flip.Enabled = false
 		end
-
+		
 		-- Handle wheel changes
 		for _, wheel in Wheels do
 			-- Apply handbrake
@@ -578,22 +534,22 @@ seat.ChildRemoved:Connect(function(child: Instance)
 					wheel["#BV"].MotorMaxTorque = (Tune.PBrakeForce * 9.80665 * Units.Force_N) * (1-Tune.PBrakeBias)
 				end
 			end
-
+			
 			-- Remove wheel force
 			if wheel:FindFirstChild("#AV") then
 				wheel["#AV"].MotorMaxTorque = 0
 				wheel["#AV"].AngularVelocity = 0
 			end
-
+			
 			-- Readjust steering
 			if wheel.Arm:FindFirstChild("Steer") then
 				wheel.Arm.Steer.Attachment0.Orientation = Vector3.new(0, -wheel.Base.Rotate.CurrentAngle, 0)
 			end
-		end
+		end	
 	end
 end)
 
---Driver mental breakdown
+-- Driver mental breakdown
 shutdownEvent.OnServerEvent:Connect(function(player: Player)
 	if not player:FindFirstChild("PlayerGui") then 
 		return 
@@ -606,10 +562,7 @@ shutdownEvent.OnServerEvent:Connect(function(player: Player)
 	end
 end)
 
---Allow entering the car now that everything is initialized
-task.wait(1)
-script.Parent.Parent.DriveSeat.Disabled = false
-
-script:SetAttribute("Loaded", true)
-
---[END]]
+task.delay(1, function()
+	script.Parent.Parent.DriveSeat.Disabled = false
+	script:SetAttribute("Loaded", true)
+end)

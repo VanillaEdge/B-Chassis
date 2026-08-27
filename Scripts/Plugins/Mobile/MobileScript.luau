@@ -9,8 +9,9 @@ local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
 local vehicleContext = script.Parent.Parent.VehicleContext :: InputContext
 
 local car = script.Parent.Parent.Car.Value :: Model
-local seat = car.DriveSeat :: VehicleSeat
 local tune = require(car["A-Chassis Tune"]) 
+
+local event = car.MobileExitEvent :: RemoteEvent -- used because of server authority
 
 local throttleActionBinding = vehicleContext.ThrottleAction.ScriptableBinding :: InputBinding
 local brakeActionBinding = vehicleContext.BrakeAction.ScriptableBinding :: InputBinding
@@ -38,12 +39,9 @@ onPreferredInputChanged()
 
 -- Jump
 script.Parent.Jump.Activated:Connect(function()
-	humanoid.Sit = false
-end)
-
-seat:GetPropertyChangedSignal("Occupant"):Connect(function()
 	GuiService.TouchControlsEnabled = true
 	tune.AutoShiftVers = defaultShiftVersion
+	event:FireServer()
 end)
 
 -- Throttle
