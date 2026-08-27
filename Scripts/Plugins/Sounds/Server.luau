@@ -9,9 +9,6 @@
 --]]
 -- *Most of the code documentation for here can be found in the LocalScript.
 
-task.wait(.5)
-
-
 local car = script.Parent.Parent
 local event = script.Parent
 
@@ -211,7 +208,7 @@ local function update(player, packet)
 				end
 				soundData.Sound:SetAttribute("Played", true)
 				soundData.Sound.Volume = soundData.Volume
-				soundData.Sound.PlaybackSpeed = soundData.Pitch + (soundData.MaxPitch - soundData.Pitch) * (RPM/_Tune.IgnitionRPM)
+				soundData.Sound.PlaybackSpeed = soundData.Pitch + (soundData.MaxPitch - soundData.Pitch) * math.clamp(RPM / _Tune.IdleRPM, 0, 1)
 			else
 				soundData.Sound:SetAttribute("Played", false)
 				if soundData.Playing == true then
