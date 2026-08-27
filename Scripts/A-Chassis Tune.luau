@@ -12,16 +12,10 @@
 local Tune = {}
 
 --[[Misc]]
-	Tune.LoadDelay		= 3			    -- Delay before initializing chassis (in seconds)
-	Tune.AutoStart		= true		    -- Set to false if using manual ignition plugin
-	Tune.AutoFlip		= true		    -- Set to false if using manual flip plugin
+	Tune.AutoStart			= true			-- Set to false if using manual ignition plugin
+	Tune.AutoFlip			= true			-- Set to false if using manual flip plugin
 
 --[[Controls]]
-	Tune.CustomInputContextEnabled = false	-- Enables a custom InputContext for vehicle controls
-	Tune.CustomInputContexPath = nil 		-- Hierachy must match the default InputContext
-	
-	-- Example: Tune.CustomInputContexPath = game:GetService("ReplicatedStorage").Inputs.VehicleContext :: InputContext
-	
 	Tune.MouseSteerLimit = 70		-- Mouse distance from center for full steering, in % of half screen width (0 - 100)
 	Tune.MouseSteerDeadzone = 5		-- Mouse distance from center before steering starts, in % of half screen width (0 - 100)
 	
